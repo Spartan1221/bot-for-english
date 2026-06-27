@@ -10,9 +10,13 @@ from aiogram import Dispatcher
 from aiogram.filters import CommandStart
 from aiogram.types import Message
 
-from .api import WordNotFound, fetch_definition, fetch_translation
+from .api import (
+    fetch_free_definition,
+    fetch_yandex_dictionary,
+    fetch_yandex_translate,
+)
 from .config import START_TEXT
-from .formatting import format_answer_parts, validate_input
+from .formatting import build_sections, sections_to_text, validate_input
 from .keyboards import build_copy_keyboard
 
 log = logging.getLogger(__name__)
@@ -26,7 +30,7 @@ async def cmd_start(message: Message) -> None:
 async def handle_word(
     message: Message, http_session: aiohttp.ClientSession
 ) -> None:
-    """Основная логика: проверка ввода → запросы к API → форматирование → ответ."""
+    """Основная логика: проверка ввода → запросы к API → сборка секций → ответ."""
     # http_session приходит через dependency injection из dp["http_session"].
 
     # 1. Валидация ввода.
@@ -38,30 +42,37 @@ async def handle_word(
         )
         return
 
-    api_query = query.lower()  # Dictionary API регистронезависим, но нормализуем.
+    is_phrase = " " in query  # фраза = есть пробел внутри.
 
-    # 2. Параллельные запросы к обоим API.
-    try:
-        (definition, example), translation = await asyncio.gather(
-            fetch_definition(http_session, api_query),
-            fetch_translation(http_session, api_query),
+    # 2. Запросы к API. Все вызовы best-effort: возвращают None/пусто при сбое.
+    if is_phrase:
+        # Фразы нет в словаре — только машинный перевод, без примера и определения.
+        translation = await fetch_yandex_translate(http_session, query)
+        example = None
+        definition = None
+    else:
+        # Отдельное слово: параллельно — словарь (переводы по частям речи + пример)
+        # и Free Dictionary (определение).
+        api_query = query.lower()
+        (variants, example), definition = await asyncio.gather(
+            fetch_yandex_dictionary(http_session, api_query),
+            fetch_free_definition(http_session, api_query),
         )
-    except WordNotFound:
-        await message.answer(f"Не удалось найти «{query}» в словаре. 😕")
-        return
-    except asyncio.TimeoutError:
-        await message.answer("Сервисы не ответили вовремя. Попробуйте ещё раз. ⏳")
-        return
-    except aiohttp.ClientError:
-        await message.answer("Ошибка сети. Проверьте подключение и попробуйте снова.")
+        translation = ", ".join(variants) if variants else None
+        # Слова нет в словаре — пробуем машинный перевод как фолбэк.
+        if translation is None:
+            translation = await fetch_yandex_translate(http_session, api_query)
+
+    # 3. Если перевода нет совсем — сообщаем, что перевести не удалось.
+    if not translation:
+        await message.answer(f"Не удалось перевести «{query}». 😕")
         return
 
-    # 3. Форматирование и отправка. Под ответом — две кнопки копирования:
-    # каждая кладёт свою строку ответа прямо в буфер обмена.
-    line1, line2 = format_answer_parts(query, example, translation, definition)
+    # 4. Сборка секций, текста и клавиатуры копирования.
+    sections = build_sections(query, example, translation, definition, is_phrase)
     await message.answer(
-        f"{line1}\n{line2}",
-        reply_markup=build_copy_keyboard(line1, line2),
+        sections_to_text(sections),
+        reply_markup=build_copy_keyboard(sections),
     )
 
 

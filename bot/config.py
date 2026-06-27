@@ -14,12 +14,24 @@ load_dotenv()
 # Токен Telegram-бота из .env.
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
+# Yandex Cloud Translate: API-ключ и каталог (folder). Нужны для перевода слов и фраз.
+YANDEX_CLOUD_API_KEY = os.getenv("YANDEX_CLOUD_API_KEY")
+YANDEX_FOLDER_ID = os.getenv("YANDEX_FOLDER_ID")
+
+# Классический Yandex Dictionary: отдельный API-ключ. Нужен для переводов по частям
+# речи и примеров употребления отдельных слов.
+YANDEX_DICT_API_KEY = os.getenv("YANDEX_DICT_API_KEY")
+
 # Общий таймаут на любой внешний API — чтобы бот не «зависал» на медленном ответе.
 API_TIMEOUT = aiohttp.ClientTimeout(total=10)
 
 # Внешние сервисы.
+# Перевод (слова и предложения) — Yandex Cloud Translate.
+YANDEX_TRANSLATE_URL = "https://api.cloud.yandex.net/translate/v2/translate"
+# Переводы по частям речи + примеры для отдельных слов — Yandex Dictionary.
+YANDEX_DICT_URL = "https://dictionary.yandex.net/api/v1/dicservice.json/lookup"
+# Английское определение (значение) — Free Dictionary API.
 DICT_URL = "https://api.dictionaryapi.dev/api/v2/entries/en/{word}"
-TRANSLATE_URL = "https://api.mymemory.translated.net/get"
 
 START_TEXT = (
     "Привет! Я бот для изучения английских слов.\n\n"
@@ -27,8 +39,8 @@ START_TEXT = (
     "  • пример использования;\n"
     "  • перевод на русский;\n"
     "  • определение (значение) на английском.\n\n"
-    "Ответ состоит ровно из двух строк — определение, перевод и пример "
-    "удобно скопировать по отдельности.\n\n"
+    "Под ответом появятся кнопки — каждая копирует свою часть (слово с примером, "
+    "перевод или значение). Фразы переводятся, но без определения.\n\n"
     "Например, отправь: serendipity"
 )
 
