@@ -1,8 +1,9 @@
 """Общие фикстуры и заглушки для тестов.
 
-Чтобы не ходить в сеть и не тащить зависимость aioresponses, имитируем
-минимальный интерфейс aiohttp, который реально используется в bot/api.py:
-`async with session.get(url, params=...) as resp` + resp.status/raise_for_status/json().
+Чтобы не ходить в сеть и не тащить зависимость aioresponses, имитируем минимальный
+интерфейс aiohttp, который реально используется в bot/api.py:
+`async with session.get(url, params=...) as resp` и
+`async with session.post(url, json=..., headers=...) as resp` + resp.status/raise_for_status/json().
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ import pytest
 
 
 class FakeResponse:
-    """Имитация ответа aiohttp для `async with session.get(...) as resp`."""
+    """Имитация ответа aiohttp для `async with session.get/post(...) as resp`."""
 
     def __init__(self, *, status: int = 200, json_data=None, enter_exc=None):
         self.status = status
@@ -29,7 +30,7 @@ class FakeResponse:
 
     def raise_for_status(self):
         if self.status >= 400:
-            # Берём базовый класс: его ловят и api.py, и хэндлеры.
+            # Берём базовый класс: его ловит и api.py, и хэндлеры.
             raise aiohttp.ClientError(f"HTTP {self.status}")
 
     async def json(self):
@@ -37,22 +38,28 @@ class FakeResponse:
 
 
 class FakeSession:
-    """Минимальная замена aiohttp.ClientSession по используемому интерфейсу."""
+    """Минимальная замена aiohttp.ClientSession по используемому интерфейсу (GET + POST)."""
 
     def __init__(self, responses):
-        # responses: dict {подстрока URL: FakeResponse}
-        # либо callable(url, params) -> FakeResponse
+        # responses: dict {подстрока URL: FakeResponse}.
         self._responses = responses
-        self.requests: list[tuple[str, dict | None]] = []
+        # Журнал запросов для проверок: [{"method","url","params","json","headers"}, ...]
+        self.requests: list[dict] = []
 
-    def get(self, url, params=None):
-        self.requests.append((url, params))
-        if callable(self._responses):
-            return self._responses(url, params)
+    def _resolve(self, method, url, *, params=None, json=None, headers=None):
+        self.requests.append(
+            {"method": method, "url": url, "params": params, "json": json, "headers": headers}
+        )
         for key, response in self._responses.items():
             if key in url:
                 return response
-        raise AssertionError(f"Нет заглушённого ответа для URL: {url}")
+        raise AssertionError(f"Нет заглушённого ответа для {method} {url}")
+
+    def get(self, url, params=None):
+        return self._resolve("GET", url, params=params)
+
+    def post(self, url, json=None, headers=None):
+        return self._resolve("POST", url, json=json, headers=headers)
 
 
 @pytest.fixture

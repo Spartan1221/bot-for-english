@@ -1,4 +1,4 @@
-"""Валидация пользовательского ввода и форматирование ответа."""
+"""Валидация пользовательского ввода и сборка ответа по секциям."""
 
 from __future__ import annotations
 
@@ -21,25 +21,39 @@ def validate_input(text: str | None) -> str | None:
     return cleaned if INPUT_RE.match(cleaned) else None
 
 
-def format_answer_parts(
-    word: str, example: str | None, translation: str | None, definition: str
-) -> tuple[str, str]:
+def build_sections(
+    word: str,
+    example: str | None,
+    translation: str | None,
+    definition: str | None,
+    is_phrase: bool,
+) -> list[tuple[str, str]]:
     """
-    Возвращает две строки ответа по отдельности: (строка 1, строка 2).
+    Собирает ответ из секций (kind, text) в порядке вывода.
 
-    Строка 1: слово (пример)        — без скобок, если примера нет.
-    Строка 2: перевод (определение) — перевод best-effort, определение обязательное.
+    Слово:   слово+пример, перевод, значение.
+    Фраза:   фраза, перевод (значения и примера у фразы нет).
 
-    Части нужны отдельно, чтобы привязать их к кнопкам копирования.
+    Отсутствующие части (нет примера/перевода/определения) в список не попадают —
+    ответ и набор кнопок адаптируются под то, что реально пришло из API.
     """
-    line1 = f"{word} ({example})" if example else word
-    ru = translation if translation else "перевод недоступен"
-    line2 = f"{ru} ({definition})"
-    return line1, line2
+    sections: list[tuple[str, str]] = []
+
+    if is_phrase:
+        sections.append(("phrase", word))
+    else:
+        line1 = f"{word} ({example})" if example else word
+        sections.append(("word", line1))
+
+    if translation:
+        sections.append(("translation", translation))
+
+    if not is_phrase and definition:
+        sections.append(("definition", definition))
+
+    return sections
 
 
-def format_answer(
-    word: str, example: str | None, translation: str | None, definition: str
-) -> str:
-    """Собирает ответ строго из двух строк, обычным текстом (без Markdown)."""
-    return "\n".join(format_answer_parts(word, example, translation, definition))
+def sections_to_text(sections: list[tuple[str, str]]) -> str:
+    """Склеивает тексты секций в сообщение (обычный текст, без Markdown)."""
+    return "\n".join(text for _, text in sections)

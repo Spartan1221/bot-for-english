@@ -9,7 +9,14 @@ import aiohttp
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 
-from .config import API_TIMEOUT, BOT_TOKEN, setup_logging
+from .config import (
+    API_TIMEOUT,
+    BOT_TOKEN,
+    YANDEX_CLOUD_API_KEY,
+    YANDEX_DICT_API_KEY,
+    YANDEX_FOLDER_ID,
+    setup_logging,
+)
 from .handlers import register_handlers
 
 log = logging.getLogger(__name__)
@@ -19,8 +26,22 @@ async def main() -> None:
     """Точка входа: создаёт бота, диспетчер, общий HTTP-сеанс и запускает polling."""
     setup_logging()
 
-    if not BOT_TOKEN:
-        log.error("BOT_TOKEN не задан. Укажите его в файле .env (см. DEPLOYMENT.md).")
+    # Проверяем обязательные секреты: токен бота и ключи Yandex.
+    missing = [
+        name
+        for name, value in (
+            ("BOT_TOKEN", BOT_TOKEN),
+            ("YANDEX_CLOUD_API_KEY", YANDEX_CLOUD_API_KEY),
+            ("YANDEX_FOLDER_ID", YANDEX_FOLDER_ID),
+            ("YANDEX_DICT_API_KEY", YANDEX_DICT_API_KEY),
+        )
+        if not value
+    ]
+    if missing:
+        log.error(
+            "Не заданы обязательные переменные: %s. Укажите их в файле .env (см. DEPLOYMENT.md).",
+            ", ".join(missing),
+        )
         sys.exit(1)
 
     # parse_mode не задаём намеренно: нужен обычный текст без Markdown.
