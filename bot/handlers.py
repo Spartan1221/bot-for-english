@@ -12,7 +12,8 @@ from aiogram.types import Message
 
 from .api import WordNotFound, fetch_definition, fetch_translation
 from .config import START_TEXT
-from .formatting import format_answer, validate_input
+from .formatting import format_answer_parts, validate_input
+from .keyboards import build_copy_keyboard
 
 log = logging.getLogger(__name__)
 
@@ -55,8 +56,13 @@ async def handle_word(
         await message.answer("Ошибка сети. Проверьте подключение и попробуйте снова.")
         return
 
-    # 3. Форматирование и отправка.
-    await message.answer(format_answer(query, example, translation, definition))
+    # 3. Форматирование и отправка. Под ответом — две кнопки копирования:
+    # каждая кладёт свою строку ответа прямо в буфер обмена.
+    line1, line2 = format_answer_parts(query, example, translation, definition)
+    await message.answer(
+        f"{line1}\n{line2}",
+        reply_markup=build_copy_keyboard(line1, line2),
+    )
 
 
 def register_handlers(dp: Dispatcher) -> None:

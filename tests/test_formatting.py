@@ -1,6 +1,6 @@
 """Тесты валидации ввода и форматирования ответа (чистые функции)."""
 
-from bot.formatting import format_answer, validate_input
+from bot.formatting import format_answer, format_answer_parts, validate_input
 
 
 class TestValidateInput:
@@ -77,3 +77,31 @@ class TestFormatAnswer:
     def test_exactly_two_lines(self):
         result = format_answer("w", "e", "t", "d")
         assert result.count("\n") == 1
+
+
+class TestFormatAnswerParts:
+    def test_returns_two_parts(self):
+        line1, line2 = format_answer_parts("word", "ex", "перевод", "def")
+        assert line1 == "word (ex)"
+        assert line2 == "перевод (def)"
+
+    def test_consistent_with_format_answer(self):
+        # join частей должен совпадать с готовым ответом — для разных наборов данных.
+        cases = [
+            ("serendipity", "It is pure serendipity.", "счастливая случайность", "def"),
+            ("word", None, "перевод", "definition"),
+            ("word", "example", None, "definition"),
+            ("w", "e", "t", "d"),
+        ]
+        for word, example, translation, definition in cases:
+            line1, line2 = format_answer_parts(word, example, translation, definition)
+            assert f"{line1}\n{line2}" == format_answer(word, example, translation, definition)
+
+    def test_without_example(self):
+        line1, line2 = format_answer_parts("word", None, "перевод", "definition")
+        assert line1 == "word"
+        assert line2 == "перевод (definition)"
+
+    def test_without_translation(self):
+        line1, line2 = format_answer_parts("word", "example", None, "definition")
+        assert line2 == "перевод недоступен (definition)"

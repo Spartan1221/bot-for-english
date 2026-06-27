@@ -27,6 +27,17 @@ MyMemory API для перевода на русский. Стек: Python 3.10+
 - [x] 13. Разбить `main.py` на модули по функциональному признаку (пакет `bot/`: config, api, formatting, handlers, app).
 - [x] 14. Добавить unit-тесты (`pytest` + `pytest-asyncio`): валидация, форматирование, API-слой, хэндлеры.
 
+## Дополнение: кнопки для копирования ответа
+
+Под ответом из двух строк добавлены две inline-кнопки: одна копирует первую строку
+(слово с примером), другая — вторую (значение с переводом). Кнопки используют
+`CopyTextButton` (Telegram Bot API 7.2) и копируют текст прямо в буфер обмена, без
+callback к боту.
+
+- [x] 15. Вынести сборку строк ответа в `format_answer_parts()` (`bot/formatting.py`), `format_answer()` делегирует ей.
+- [x] 16. Добавить модуль `bot/keyboards.py` с `build_copy_keyboard(line1, line2)` — две кнопки `CopyTextButton` в две строки.
+- [x] 17. В `handle_word` прикреплять клавиатуру к ответу; покрыть изменения тестами (`tests/test_keyboards.py`, расширить `test_formatting.py` и `test_handlers.py`).
+
 ## Итоговая архитектура (пакет `bot/`)
 
 Логика разбита по модулям по функциональному признаку:
@@ -36,7 +47,8 @@ MyMemory API для перевода на русский. Стек: Python 3.10+
 | `main.py` (корень) | Тонкая точка входа: `asyncio.run(bot.app.main())`. |
 | `bot/config.py` | `BOT_TOKEN` из `.env`, константы URL, таймаут, `START_TEXT`, `setup_logging()`. |
 | `bot/api.py` | `fetch_definition()` (Dictionary API), `fetch_translation()` (MyMemory), `pick_definition()`, `WordNotFound`. |
-| `bot/formatting.py` | `validate_input()` и `format_answer()`. |
+| `bot/formatting.py` | `validate_input()`, `format_answer()` и `format_answer_parts()` (две строки ответа по отдельности — для кнопок). |
+| `bot/keyboards.py` | `build_copy_keyboard(line1, line2)` — inline-клавиатура из двух `CopyTextButton`. |
 | `bot/handlers.py` | `cmd_start()` для `/start`, `handle_word()` для остальных сообщений, `register_handlers(dp)`. |
 | `bot/app.py` | `main()`: создаёт бота, диспетчер, общий HTTP-сеанс и запускает long-polling. |
 
@@ -44,7 +56,8 @@ MyMemory API для перевода на русский. Стек: Python 3.10+
 
 | Файл | Что покрывает |
 |---|---|
-| `tests/test_formatting.py` | `validate_input`, `format_answer` (чистые функции). |
+| `tests/test_formatting.py` | `validate_input`, `format_answer`, `format_answer_parts` (чистые функции). |
+| `tests/test_keyboards.py` | `build_copy_keyboard`: две кнопки в две строки, цели копирования совпадают со строками ответа. |
 | `tests/test_api.py` | `pick_definition` и `fetch_*` через фейковую aiohttp-сессию. |
 | `tests/test_handlers.py` | `cmd_start`, `handle_word` (message и API мокируются). |
 | `tests/conftest.py` | Общие фикстуры `make_response`, `fake_session_factory` (без похода в сеть). |

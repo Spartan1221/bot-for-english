@@ -21,16 +21,25 @@ def validate_input(text: str | None) -> str | None:
     return cleaned if INPUT_RE.match(cleaned) else None
 
 
-def format_answer(
+def format_answer_parts(
     word: str, example: str | None, translation: str | None, definition: str
-) -> str:
+) -> tuple[str, str]:
     """
-    Собирает ответ строго из двух строк, обычным текстом (без Markdown).
+    Возвращает две строки ответа по отдельности: (строка 1, строка 2).
 
     Строка 1: слово (пример)        — без скобок, если примера нет.
     Строка 2: перевод (определение) — перевод best-effort, определение обязательное.
+
+    Части нужны отдельно, чтобы привязать их к кнопкам копирования.
     """
     line1 = f"{word} ({example})" if example else word
     ru = translation if translation else "перевод недоступен"
     line2 = f"{ru} ({definition})"
-    return f"{line1}\n{line2}"
+    return line1, line2
+
+
+def format_answer(
+    word: str, example: str | None, translation: str | None, definition: str
+) -> str:
+    """Собирает ответ строго из двух строк, обычным текстом (без Markdown)."""
+    return "\n".join(format_answer_parts(word, example, translation, definition))
