@@ -110,9 +110,9 @@ sudo apt install -y python3 python3-venv python3-pip git
 
    [Service]
    Type=simple
-   User=ubuntu
-   WorkingDirectory=/opt/english-bot
-   ExecStart=/opt/english-bot/venv/bin/python /opt/english-bot/main.py
+   User=root
+   WorkingDirectory=/root/bot-for-english
+   ExecStart=/root/bot-for-english/venv/bin/python /root/bot-for-english/main.py
    Restart=on-failure
    RestartSec=5
 
@@ -146,7 +146,7 @@ pip install -r requirements.txt
 # впишите токен в .env
 ```
 
-**Через tmux:**
+**Через tmux:**л
 ```bash
 tmux new -s english-bot
 source venv/bin/activate
