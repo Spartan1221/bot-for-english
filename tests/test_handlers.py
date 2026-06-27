@@ -48,6 +48,27 @@ async def test_handle_word_formats_valid_input(monkeypatch):
     )
 
 
+async def test_handle_word_sends_copy_keyboard(monkeypatch):
+    async def fake_definition(session, query):
+        return ("a nice word", "It is a nice word.")
+
+    async def fake_translation(session, query):
+        return "хорошее слово"
+
+    monkeypatch.setattr("bot.handlers.fetch_definition", fake_definition)
+    monkeypatch.setattr("bot.handlers.fetch_translation", fake_translation)
+
+    message = AsyncMock()
+    message.text = "serendipity"
+    await handle_word(message, http_session=AsyncMock())
+
+    # Под ответом — клавиатура из двух кнопок, копирующих каждую строку.
+    markup = message.answer.call_args.kwargs["reply_markup"]
+    assert len(markup.inline_keyboard) == 2
+    assert markup.inline_keyboard[0][0].copy_text.text == "serendipity (It is a nice word.)"
+    assert markup.inline_keyboard[1][0].copy_text.text == "хорошее слово (a nice word)"
+
+
 async def test_handle_word_reports_not_found(monkeypatch):
     async def fake_definition(session, query):
         raise WordNotFound(query)
