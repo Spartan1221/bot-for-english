@@ -1,0 +1,4 @@
+# Telegram-бот для английских слов — зависимости
+aiogram>=3.7.0    # фреймворк Telegram-бота (3.x)
+aiohttp>=3.9.0    # асинхронные HTTP-запросы к Dictionary API и MyMemory
+python-dotenv>=1.0.0  # загрузка BOT_TOKEN из файла .env
