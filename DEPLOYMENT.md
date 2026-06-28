@@ -61,23 +61,21 @@ pip install -r requirements.txt
 ```env
 BOT_TOKEN=123456789:AAH...ваш-реальный-токен...
 
-# Yandex Cloud Translate — перевод слов и фраз
-YANDEX_CLOUD_API_KEY=ваш-ключ-Yandex-Cloud-Translate
-YANDEX_FOLDER_ID=id-каталога-Yandex-Cloud
+# Microsoft (Azure) Translator — перевод слов и фраз
+AZURE_TRANSLATOR_KEY=ваш-ключ-Azure-Translator
+AZURE_TRANSLATOR_REGION=регион-ресурса-напр-westeurope
 
-# Yandex Dictionary — переводы по частям речи и примеры для слов
+# Yandex Dictionary — переводы по частям речи для слов
 YANDEX_DICT_API_KEY=ваш-ключ-Yandex-Dictionary
 ```
 Без любого из этих значений бот не запустится (проверяется при старте).
 
-#### 2.4.1. Получение ключей Yandex
+#### 2.4.1. Получение ключей
 
-**Yandex Cloud Translate** (`YANDEX_CLOUD_API_KEY`, `YANDEX_FOLDER_ID`):
-1. Зарегистрируйтесь в [Yandex Cloud](https://cloud.yandex.ru/) и создайте платёжный аккаунт (есть бесплатный стартовый грант).
-2. В консоли выберите каталог и скопируйте его **id** → это `YANDEX_FOLDER_ID`.
-3. Создайте **сервисный аккаунт** в этом каталоге и выдайте ему роль `ai.translate.user` (исполнитель Translate).
-4. Для сервисного аккаунта создайте **API-ключ** → это `YANDEX_CLOUD_API_KEY`.
-Подробно: [документация Translate](https://cloud.yandex.ru/docs/translate/).
+**Microsoft (Azure) Translator** (`AZURE_TRANSLATOR_KEY`, `AZURE_TRANSLATOR_REGION`):
+1. В [портале Azure](https://portal.azure.com/) создайте ресурс **Translator** (ценовая категория F0 — бесплатный лимит).
+2. В разделе «Ключи и конечная точка» скопируйте **KEY 1** → это `AZURE_TRANSLATOR_KEY`, и **LOCATION/REGION** → это `AZURE_TRANSLATOR_REGION`.
+Подробно: [документация Translator](https://learn.microsoft.com/azure/ai-services/translator/).
 
 **Yandex Dictionary** (`YANDEX_DICT_API_KEY`):
 1. Откройте [yandex.ru/dev/dictionary](https://yandex.ru/dev/dictionary) и нажмите «Получить ключ».
@@ -192,9 +190,9 @@ python main.py
 ## 4. Проверка после деплоя
 
 1. В Telegram откройте бота, отправьте `/start` — должен прийти текст приветствия.
-2. Отправьте слово `set` — придёт ответ **таблицей** (`|` и `-`) из трёх строк: Слово (с примером), Перевод (варианты по частям речи через запятую), Значение (английское определение). Под таблицей три кнопки: «📋 Слово + пример», «📋 Перевод», «📋 Значение» — тап копирует значение строки.
-3. Отправьте фразу `good morning` или предложение `i love you` — придёт таблица из двух строк (Фраза / Перевод) и две кнопки; у фразы нет примера и значения.
-4. Проверьте распознавание артиклей: `to go` → ищется слово `go` (полная карточка), `a book` → `book`, `an apple` → `apple`.
+2. Отправьте слово `set` — придёт ответ из строк, разделённых `-----`: слово с примером, переводы (существительное и глагол через запятую), английское определение. Под ответом три кнопки: «📋 Слово + пример», «📋 Перевод», «📋 Значение» — тап копирует значение строки.
+3. Отправьте фразу `good morning` или предложение `i love you` — придёт две строки (фраза / перевод), разделённые `-----`, и две кнопки; у фразы нет примера и значения.
+4. Проверьте артикли как часть речи: `a book`/`an apple`/`the set` → только существительные переводы; `to book`/`to go` → только глагольные; `book` без артикля → и существительные, и глагольные.
 5. Отправьте `123` (цифры) — отвергается; бессмысленное `asdfqwerty` → «Не удалось перевести …».
 6. Логи на сервере: `sudo journalctl -u english-bot -f` (для systemd).
 

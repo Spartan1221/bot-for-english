@@ -1,4 +1,4 @@
-"""Слой взаимодействия с внешними API: Yandex Cloud Translate, Yandex Dictionary, Free Dictionary."""
+"""Слой взаимодействия с внешними API: Microsoft (Azure) Translator, Yandex Dictionary, Free Dictionary."""
 
 from __future__ import annotations
 
@@ -8,12 +8,12 @@ import logging
 import aiohttp
 
 from .config import (
+    AZURE_TRANSLATE_URL,
+    AZURE_TRANSLATOR_KEY,
+    AZURE_TRANSLATOR_REGION,
     DICT_URL,
-    YANDEX_CLOUD_API_KEY,
     YANDEX_DICT_API_KEY,
     YANDEX_DICT_URL,
-    YANDEX_FOLDER_ID,
-    YANDEX_TRANSLATE_URL,
 )
 
 log = logging.getLogger(__name__)
@@ -23,79 +23,87 @@ MAX_TRANSLATIONS = 8
 
 
 # --------------------------------------------------------------------------- #
-#  Yandex Cloud Translate — перевод слов и предложений
+#  Microsoft (Azure) Translator — перевод слов и предложений
 # --------------------------------------------------------------------------- #
-async def fetch_yandex_translate(
+async def fetch_microsoft_translate(
     session: aiohttp.ClientSession, text: str
 ) -> str | None:
     """
-    Перевод текста (слово или фраза) с английского на русский через Yandex Cloud Translate.
+    Перевод текста (слово или фраза) с английского на русский через Microsoft Translator.
 
     Best-effort: при любой ошибке сети/таймаута/квоты возвращает None, чтобы отсутствие
     перевода не ломало формирование ответа.
     """
-    headers = {"Authorization": f"Api-Key {YANDEX_CLOUD_API_KEY}"}
-    body = {
-        "folderId": YANDEX_FOLDER_ID,
-        "texts": [text],
-        "sourceLanguageCode": "en",
-        "targetLanguageCode": "ru",
+    headers = {
+        "Ocp-Apim-Subscription-Key": AZURE_TRANSLATOR_KEY,
+        "Ocp-Apim-Subscription-Region": AZURE_TRANSLATOR_REGION,
+        "Content-Type": "application/json",
     }
+    body = [{"Text": text}]
     try:
-        async with session.post(YANDEX_TRANSLATE_URL, headers=headers, json=body) as resp:
+        async with session.post(AZURE_TRANSLATE_URL, headers=headers, json=body) as resp:
             resp.raise_for_status()
             data = await resp.json()
     except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as exc:
-        log.warning("Yandex Translate не сработал для %r: %s", text, exc)
+        log.warning("Microsoft Translator не сработал для %r: %s", text, exc)
         return None
 
     try:
-        translated = data["translations"][0]["text"].strip()
+        translated = data[0]["translations"][0]["text"].strip()
     except (KeyError, IndexError, TypeError, AttributeError):
-        log.warning("Неожиданный ответ Yandex Translate для %r: %s", text, data)
+        log.warning("Неожиданный ответ Microsoft Translator для %r: %s", text, data)
         return None
     if not translated or translated.lower() == text.strip().lower():
-        # Cloud Translate отдаёт исходный текст как есть, когда не может перевести
-        # (напр. бессмысленный набор букв) — это не перевод.
+        # Переводчик может вернуть исходный текст как есть для непереводимого ввода.
         return None
     return translated
 
 
 # --------------------------------------------------------------------------- #
-#  Yandex Dictionary — переводы по частям речи для отдельного слова
+#  Yandex Dictionary — переводы отдельного слова, отфильтрованные по части речи
 # --------------------------------------------------------------------------- #
-def parse_dictionary(data: dict) -> list[str]:
+def parse_dictionary(data: dict, allowed_pos: list[str]) -> list[str]:
     """
-    Разбирает ответ Yandex Dictionary: возвращает варианты перевода.
+    Варианты перевода из ответа Yandex Dictionary, отфильтрованные по частям речи.
 
-    Варианты собираются из переводов всех частей речи (def[].tr[].text) и их
-    синонимов (def[].tr[].syn[].text), дедупятся с сохранением порядка и обрезаются
-    до MAX_TRANSLATIONS. Примеры Yandex Dictionary в ответе не отдаёт — их берём из
-    Free Dictionary API.
+    `allowed_pos` — упорядоченный список (напр. ["noun"], ["verb"], ["noun", "verb"]);
+    порядок задаёт очерёдность групп в выводе (noun раньше verb). Берутся
+    def[].tr[].text и их синонимы def[].tr[].syn[].text. Лимит делится поровну между
+    запрошенными частями речи (MAX_TRANSLATIONS // len(allowed_pos) на каждую), чтобы
+    при «noun + verb» обе группы гарантированно попали в ответ, а не вытесняли друг друга.
+    Дедуп — глобальный.
     """
-    translations: list[str] = []
-
-    for def_entry in data.get("def", []):
-        for tr in def_entry.get("tr", []):
-            text = tr.get("text")
-            if text and text not in translations:
-                translations.append(text)
-            for syn in tr.get("syn", []):
-                text = syn.get("text")
-                if text and text not in translations:
-                    translations.append(text)
-
-    return translations[:MAX_TRANSLATIONS]
+    per_pos = max(1, MAX_TRANSLATIONS // max(1, len(allowed_pos)))
+    result: list[str] = []
+    seen: set[str] = set()
+    for pos in allowed_pos:
+        group: list[str] = []
+        for def_entry in data.get("def", []):
+            if def_entry.get("pos") != pos:
+                continue
+            for tr in def_entry.get("tr", []):
+                candidates = [tr.get("text")]
+                candidates += [syn.get("text") for syn in tr.get("syn", [])]
+                for cand in candidates:
+                    if cand and cand not in seen and len(group) < per_pos:
+                        seen.add(cand)
+                        group.append(cand)
+                if len(group) >= per_pos:
+                    break
+            if len(group) >= per_pos:
+                break
+        result.extend(group)
+    return result
 
 
 async def fetch_yandex_dictionary(
-    session: aiohttp.ClientSession, word: str
+    session: aiohttp.ClientSession, word: str, allowed_pos: list[str]
 ) -> list[str]:
     """
-    Словарный lookup слова в Yandex Dictionary: переводы по частям речи.
+    Словарный lookup слова в Yandex Dictionary с фильтром по частям речи.
 
-    Возвращает [], если у слова нет словарной статьи (404/пустой def) или при ошибке
-    сети — это не критично, фолбэком послужит машинный перевод.
+    Возвращает [], если статьи нет (404/пустой def) или при ошибке сети — не критично,
+    фолбэком послужит машинный перевод.
     """
     params = {"key": YANDEX_DICT_API_KEY, "lang": "en-ru", "text": word}
     try:
@@ -108,7 +116,7 @@ async def fetch_yandex_dictionary(
         log.warning("Yandex Dictionary не сработал для %r: %s", word, exc)
         return []
 
-    return parse_dictionary(data or {})
+    return parse_dictionary(data or {}, allowed_pos)
 
 
 # --------------------------------------------------------------------------- #

@@ -11,10 +11,10 @@ from aiogram.client.default import DefaultBotProperties
 
 from .config import (
     API_TIMEOUT,
+    AZURE_TRANSLATOR_KEY,
+    AZURE_TRANSLATOR_REGION,
     BOT_TOKEN,
-    YANDEX_CLOUD_API_KEY,
     YANDEX_DICT_API_KEY,
-    YANDEX_FOLDER_ID,
     setup_logging,
 )
 from .handlers import register_handlers
@@ -26,13 +26,13 @@ async def main() -> None:
     """Точка входа: создаёт бота, диспетчер, общий HTTP-сеанс и запускает polling."""
     setup_logging()
 
-    # Проверяем обязательные секреты: токен бота и ключи Yandex.
+    # Проверяем обязательные секреты: токен бота, ключи Microsoft Translator и Yandex Dictionary.
     missing = [
         name
         for name, value in (
             ("BOT_TOKEN", BOT_TOKEN),
-            ("YANDEX_CLOUD_API_KEY", YANDEX_CLOUD_API_KEY),
-            ("YANDEX_FOLDER_ID", YANDEX_FOLDER_ID),
+            ("AZURE_TRANSLATOR_KEY", AZURE_TRANSLATOR_KEY),
+            ("AZURE_TRANSLATOR_REGION", AZURE_TRANSLATOR_REGION),
             ("YANDEX_DICT_API_KEY", YANDEX_DICT_API_KEY),
         )
         if not value

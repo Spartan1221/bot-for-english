@@ -8,36 +8,61 @@ import aiohttp
 
 from bot.api import (
     fetch_free_definition,
+    fetch_microsoft_translate,
     fetch_yandex_dictionary,
-    fetch_yandex_translate,
     parse_dictionary,
     pick_definition,
 )
 
 
 # --------------------------------------------------------------------------- #
-#  parse_dictionary — чистая функция (только переводы)
+#  parse_dictionary — чистая функция (фильтр по частям речи)
 # --------------------------------------------------------------------------- #
 class TestParseDictionary:
-    def test_translations_from_tr(self):
-        data = {"def": [{"tr": [{"text": "набор"}, {"text": "множество"}]}]}
-        assert parse_dictionary(data) == ["набор", "множество"]
-
-    def test_includes_synonyms_and_dedups(self):
-        data = {"def": [
-            {"pos": "noun", "tr": [{"text": "набор", "syn": [{"text": "комплект"}, {"text": "набор"}]}]},
-            {"pos": "verb", "tr": [{"text": "устанавливать", "syn": [{"text": "задавать"}]}]},
+    def _data(self):
+        # статья сразу с существительным и глаголом
+        return {"def": [
+            {"pos": "noun", "tr": [{"text": "книга", "syn": [{"text": "книжка"}]}]},
+            {"pos": "verb", "tr": [{"text": "бронировать", "syn": [{"text": "забронировать"}]}]},
         ]}
-        assert parse_dictionary(data) == ["набор", "комплект", "устанавливать", "задавать"]
 
-    def test_empty_def(self):
-        assert parse_dictionary({"def": []}) == []
-        assert parse_dictionary({}) == []
+    def test_noun_only(self):
+        assert parse_dictionary(self._data(), ["noun"]) == ["книга", "книжка"]
 
-    def test_caps_translations(self):
+    def test_verb_only(self):
+        assert parse_dictionary(self._data(), ["verb"]) == ["бронировать", "забронировать"]
+
+    def test_both_noun_then_verb(self):
+        # без артикля: и noun, и verb; порядок noun раньше verb.
+        assert parse_dictionary(self._data(), ["noun", "verb"]) == [
+            "книга", "книжка", "бронировать", "забронировать",
+        ]
+
+    def test_dedups(self):
+        data = {"def": [{"pos": "noun", "tr": [
+            {"text": "книга"}, {"text": "книга"}, {"text": "том"},
+        ]}]}
+        assert parse_dictionary(data, ["noun"]) == ["книга", "том"]
+
+    def test_empty(self):
+        assert parse_dictionary({"def": []}, ["noun", "verb"]) == []
+        assert parse_dictionary({}, ["noun"]) == []
+
+    def test_caps(self):
         # Больше вариантов, чем лимит — обрезаем.
-        data = {"def": [{"tr": [{"text": f"t{i}"} for i in range(20)]}]}
-        assert len(parse_dictionary(data)) == 8
+        data = {"def": [{"pos": "noun", "tr": [{"text": f"t{i}"} for i in range(20)]}]}
+        assert len(parse_dictionary(data, ["noun"])) == 8
+
+    def test_balances_pos_when_capped(self):
+        # Много существительных и глаголов — лимит делится поровну, обе части речи видны.
+        data = {"def": [
+            {"pos": "noun", "tr": [{"text": f"n{i}"} for i in range(6)]},
+            {"pos": "verb", "tr": [{"text": f"v{i}"} for i in range(6)]},
+        ]}
+        out = parse_dictionary(data, ["noun", "verb"])
+        assert len(out) == 8  # 4 noun + 4 verb
+        assert any(x.startswith("n") for x in out)
+        assert any(x.startswith("v") for x in out)
 
 
 # --------------------------------------------------------------------------- #
@@ -68,90 +93,93 @@ class TestPickDefinition:
 
 
 # --------------------------------------------------------------------------- #
-#  fetch_yandex_translate — POST к Cloud Translate, best-effort
+#  fetch_microsoft_translate — POST к Azure Translator, best-effort
 # --------------------------------------------------------------------------- #
-class TestFetchYandexTranslate:
+class TestFetchMicrosoftTranslate:
     async def test_translation_ok(self, fake_session_factory, make_response):
         session = fake_session_factory({
-            "translate.api.cloud.yandex.net": make_response(
+            "microsofttranslator.com": make_response(
                 status=200,
-                json_data={"translations": [{"text": "доброе утро"}]},
+                json_data=[{"translations": [{"text": "доброе утро", "to": "ru"}]}],
             ),
         })
-        assert await fetch_yandex_translate(session, "good morning") == "доброе утро"
+        assert await fetch_microsoft_translate(session, "good morning") == "доброе утро"
 
-    async def test_untranslatable_returns_none(self, fake_session_factory, make_response):
-        # Cloud отдал текст без изменений — значит перевести не смог (напр. бессмысленный ввод).
+    async def test_sends_key_region_and_body(self, fake_session_factory, make_response):
         session = fake_session_factory({
-            "translate.api.cloud.yandex.net": make_response(
-                status=200, json_data={"translations": [{"text": "asdfqwerty"}]},
+            "microsofttranslator.com": make_response(
+                status=200, json_data=[{"translations": [{"text": "привет", "to": "ru"}]}],
             ),
         })
-        assert await fetch_yandex_translate(session, "asdfqwerty") is None
-
-    async def test_sends_auth_header_and_folder(self, fake_session_factory, make_response):
-        session = fake_session_factory({
-            "translate.api.cloud.yandex.net": make_response(
-                status=200, json_data={"translations": [{"text": "привет"}]}
-            ),
-        })
-        await fetch_yandex_translate(session, "hi")
+        await fetch_microsoft_translate(session, "hi")
         req = session.requests[0]
         assert req["method"] == "POST"
-        assert req["headers"]["Authorization"].startswith("Api-Key ")
-        assert req["json"]["texts"] == ["hi"]
-        assert req["json"]["targetLanguageCode"] == "ru"
-        assert "folderId" in req["json"]
+        assert req["headers"]["Ocp-Apim-Subscription-Key"]
+        assert req["headers"]["Ocp-Apim-Subscription-Region"]
+        assert req["json"] == [{"Text": "hi"}]
+
+    async def test_untranslatable_returns_none(self, fake_session_factory, make_response):
+        # Переводчик вернул текст без изменений — значит перевести не смог.
+        session = fake_session_factory({
+            "microsofttranslator.com": make_response(
+                status=200, json_data=[{"translations": [{"text": "asdfqwerty"}]}],
+            ),
+        })
+        assert await fetch_microsoft_translate(session, "asdfqwerty") is None
 
     async def test_server_error_returns_none(self, fake_session_factory, make_response):
         session = fake_session_factory({
-            "translate.api.cloud.yandex.net": make_response(status=500, json_data=None),
+            "microsofttranslator.com": make_response(status=500, json_data=None),
         })
-        assert await fetch_yandex_translate(session, "hi") is None
+        assert await fetch_microsoft_translate(session, "hi") is None
 
     async def test_timeout_returns_none(self, fake_session_factory, make_response):
         session = fake_session_factory({
-            "translate.api.cloud.yandex.net": make_response(enter_exc=asyncio.TimeoutError()),
+            "microsofttranslator.com": make_response(enter_exc=asyncio.TimeoutError()),
         })
-        assert await fetch_yandex_translate(session, "hi") is None
+        assert await fetch_microsoft_translate(session, "hi") is None
 
     async def test_malformed_response_returns_none(self, fake_session_factory, make_response):
         session = fake_session_factory({
-            "translate.api.cloud.yandex.net": make_response(status=200, json_data={"unexpected": 1}),
+            "microsofttranslator.com": make_response(status=200, json_data={"unexpected": 1}),
         })
-        assert await fetch_yandex_translate(session, "hi") is None
+        assert await fetch_microsoft_translate(session, "hi") is None
 
 
 # --------------------------------------------------------------------------- #
-#  fetch_yandex_dictionary — GET, best-effort (только переводы)
+#  fetch_yandex_dictionary — GET с фильтром по частям речи, best-effort
 # --------------------------------------------------------------------------- #
 class TestFetchYandexDictionary:
-    async def test_found(self, fake_session_factory, make_response):
-        data = {"def": [{"tr": [{"text": "набор", "syn": [{"text": "комплект"}]}]}]}
+    async def test_found_with_pos_filter(self, fake_session_factory, make_response):
+        data = {"def": [
+            {"pos": "noun", "tr": [{"text": "книга"}]},
+            {"pos": "verb", "tr": [{"text": "бронировать"}]},
+        ]}
         session = fake_session_factory({
             "dictionary.yandex.net": make_response(status=200, json_data=data),
         })
-        assert await fetch_yandex_dictionary(session, "set") == ["набор", "комплект"]
+        # Запросили только существительные переводы.
+        assert await fetch_yandex_dictionary(session, "book", ["noun"]) == ["книга"]
         assert session.requests[0]["params"]["lang"] == "en-ru"
-        assert session.requests[0]["params"]["text"] == "set"
+        assert session.requests[0]["params"]["text"] == "book"
 
     async def test_not_found_404(self, fake_session_factory, make_response):
         session = fake_session_factory({
             "dictionary.yandex.net": make_response(status=404, json_data={"def": []}),
         })
-        assert await fetch_yandex_dictionary(session, "asdfqwerty") == []
+        assert await fetch_yandex_dictionary(session, "asdfqwerty", ["noun", "verb"]) == []
 
     async def test_empty_def(self, fake_session_factory, make_response):
         session = fake_session_factory({
             "dictionary.yandex.net": make_response(status=200, json_data={"def": []}),
         })
-        assert await fetch_yandex_dictionary(session, "x") == []
+        assert await fetch_yandex_dictionary(session, "x", ["noun"]) == []
 
     async def test_error_returns_empty(self, fake_session_factory, make_response):
         session = fake_session_factory({
             "dictionary.yandex.net": make_response(enter_exc=asyncio.TimeoutError()),
         })
-        assert await fetch_yandex_dictionary(session, "x") == []
+        assert await fetch_yandex_dictionary(session, "x", ["noun"]) == []
 
 
 # --------------------------------------------------------------------------- #

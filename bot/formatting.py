@@ -1,24 +1,18 @@
-"""Валидация пользовательского ввода и сборка ответа (секции + таблица)."""
+"""Валидация ввода, определение части речи по артиклю и сборка ответа."""
 
 from __future__ import annotations
 
 import re
 
 # Допустимый ввод: только латинские буквы и пробелы (одно слово или фраза).
-# Это соответствует backend-словарю для английского и требованию ТЗ.
 INPUT_RE = re.compile(r"^[A-Za-z]+(?:[ \t]+[A-Za-z]+)*$")
 
-# Ведущие служебные слова, которые отбрасываем перед словарным lookup:
-# артикли (a, an) и инфинитивная частица (to).
-LEADING_PARTICLES = ("a", "an", "to")
+# Ведущий артикль/частица → какая часть речи нужна в переводе.
+# a/an/the указывают на существительное, to — на глагол.
+ARTICLE_POS = {"a": "noun", "an": "noun", "the": "noun", "to": "verb"}
 
-# Подписи строк таблицы по типу секции.
-TABLE_LABELS = {
-    "word": "Слово",
-    "phrase": "Фраза",
-    "translation": "Перевод",
-    "definition": "Значение",
-}
+# Разделитель между строками ответа.
+SECTION_SEPARATOR = "-----"
 
 
 def validate_input(text: str | None) -> str | None:
@@ -33,19 +27,21 @@ def validate_input(text: str | None) -> str | None:
     return cleaned if INPUT_RE.match(cleaned) else None
 
 
-def strip_leading_article(query: str) -> str:
+def classify_input(query: str) -> tuple[str, list[str], bool]:
     """
-    Отбрасывает ведущий артикль/частицу (a/an/to), если за ним есть ещё текст.
+    Определяет, что искать — отдельное слово (с фильтром по части речи) или фразу.
 
-    'to go' -> 'go', 'a book' -> 'book', 'an apple' -> 'apple'.
-    Одиночный артикль ('a', 'to') и фразы без артикля ('good morning') не меняет.
-    Устойчива к любым пробельным разделителям (split() без аргумента) — хотя на вход
-    обычно поступает уже нормализованный запрос из validate_input.
+    Возвращает (голова, allowed_pos, is_phrase):
+    - `'<article> <word>'`: a/an/the → слово, только noun; to → слово, только verb.
+    - одиночное слово без артикля → слово, и noun и verb.
+    - иначе (2+ слова без ведущего артикля / предложение) → фраза, allowed_pos = [].
     """
-    parts = query.split()
-    if len(parts) >= 2 and parts[0].lower() in LEADING_PARTICLES:
-        return " ".join(parts[1:])
-    return query
+    tokens = query.split()
+    if len(tokens) == 1:
+        return tokens[0], ["noun", "verb"], False
+    if len(tokens) == 2 and tokens[0].lower() in ARTICLE_POS:
+        return tokens[1], [ARTICLE_POS[tokens[0].lower()]], False
+    return query, [], True
 
 
 def build_sections(
@@ -81,26 +77,13 @@ def build_sections(
     return sections
 
 
-def sections_to_table(sections: list[tuple[str, str]]) -> str:
+def sections_to_text(sections: list[tuple[str, str]]) -> str:
     """
-    Превращает секции в обычнотекстовую таблицу (заголовок + разделитель из «-»,
-    колонки разделены «|»). parse_mode не включаем, поэтому символы рисуются как есть.
+    Склеивает тексты секций, разделяя их строкой '-----'.
 
-    Кнопки копирования (build_copy_keyboard) копируют значения правой колонки как есть.
+    Обычный текст без Markdown (parse_mode выключен) — разделитель рисуется буквально.
+    Кнопки копирования (build_copy_keyboard) копируют значения секций как есть.
     """
     if not sections:
         return ""
-
-    rows = [("Часть", "Содержимое")]
-    rows += [(TABLE_LABELS.get(kind, kind.capitalize()), text) for kind, text in sections]
-
-    w_label = max(len(label) for label, _ in rows)
-    w_value = max(len(value) for _, value in rows)
-
-    def row(label: str, value: str) -> str:
-        return f"| {label.ljust(w_label)} | {value.ljust(w_value)} |"
-
-    separator = f"|{'-' * (w_label + 2)}|{'-' * (w_value + 2)}|"
-    lines = [row(*rows[0]), separator]
-    lines += [row(label, value) for label, value in rows[1:]]
-    return "\n".join(lines)
+    return f"\n{SECTION_SEPARATOR}\n".join(text for _, text in sections)
