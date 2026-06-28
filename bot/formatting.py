@@ -1,4 +1,4 @@
-"""Валидация пользовательского ввода и сборка ответа по секциям."""
+"""Валидация пользовательского ввода и сборка ответа (секции + таблица)."""
 
 from __future__ import annotations
 
@@ -7,6 +7,18 @@ import re
 # Допустимый ввод: только латинские буквы и пробелы (одно слово или фраза).
 # Это соответствует backend-словарю для английского и требованию ТЗ.
 INPUT_RE = re.compile(r"^[A-Za-z]+(?:[ \t]+[A-Za-z]+)*$")
+
+# Ведущие служебные слова, которые отбрасываем перед словарным lookup:
+# артикли (a, an) и инфинитивная частица (to).
+LEADING_PARTICLES = ("a", "an", "to")
+
+# Подписи строк таблицы по типу секции.
+TABLE_LABELS = {
+    "word": "Слово",
+    "phrase": "Фраза",
+    "translation": "Перевод",
+    "definition": "Значение",
+}
 
 
 def validate_input(text: str | None) -> str | None:
@@ -19,6 +31,19 @@ def validate_input(text: str | None) -> str | None:
         return None
     cleaned = re.sub(r"\s+", " ", text.strip())
     return cleaned if INPUT_RE.match(cleaned) else None
+
+
+def strip_leading_article(query: str) -> str:
+    """
+    Отбрасывает ведущий артикль/частицу (a/an/to), если за ним есть ещё текст.
+
+    'to go' -> 'go', 'a book' -> 'book', 'an apple' -> 'apple'.
+    Одиночный артикль ('a', 'to') и фразы без артикля ('good morning') не меняет.
+    """
+    parts = query.split(" ")
+    if len(parts) >= 2 and parts[0].lower() in LEADING_PARTICLES:
+        return " ".join(parts[1:])
+    return query
 
 
 def build_sections(
@@ -54,6 +79,26 @@ def build_sections(
     return sections
 
 
-def sections_to_text(sections: list[tuple[str, str]]) -> str:
-    """Склеивает тексты секций в сообщение (обычный текст, без Markdown)."""
-    return "\n".join(text for _, text in sections)
+def sections_to_table(sections: list[tuple[str, str]]) -> str:
+    """
+    Превращает секции в обычнотекстовую таблицу (заголовок + разделитель из «-»,
+    колонки разделены «|»). parse_mode не включаем, поэтому символы рисуются как есть.
+
+    Кнопки копирования (build_copy_keyboard) копируют значения правой колонки как есть.
+    """
+    if not sections:
+        return ""
+
+    rows = [("Часть", "Содержимое")]
+    rows += [(TABLE_LABELS[kind], text) for kind, text in sections]
+
+    w_label = max(len(label) for label, _ in rows)
+    w_value = max(len(value) for _, value in rows)
+
+    def row(label: str, value: str) -> str:
+        return f"| {label.ljust(w_label)} | {value.ljust(w_value)} |"
+
+    separator = f"|{'-' * (w_label + 2)}|{'-' * (w_value + 2)}|"
+    lines = [row(*rows[0]), separator]
+    lines += [row(label, value) for label, value in rows[1:]]
+    return "\n".join(lines)

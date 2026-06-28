@@ -56,6 +56,20 @@ Dictionary** (переводы по частям речи + пример для 
 - [x] 23. `app.py`: проверка `BOT_TOKEN` + трёх Yandex-секретов при старте (`sys.exit(1)` если чего-то нет).
 - [x] 24. Переписать тесты под новый API/шаблон (`conftest` — `post()` у `FakeSession`; `test_api`/`test_formatting`/`test_keyboards`/`test_handlers`).
 
+## Дополнение 3: фиксы по результатам живой проверки
+
+После подключения реальных ключей вскрылись проблемы: фразы не переводились (неверный hostname
+Cloud Translate → 404), не было примеров (Yandex Dictionary не отдаёт `ex`), не распознавались
+артикли. Источники перераспределены: **пример + определение — из Free Dictionary**, **переводы —
+из Yandex Dictionary**, **фразы/предложения — из Cloud Translate**. Ответ оформлен таблицей.
+
+- [x] 25. `config.py`: `YANDEX_TRANSLATE_URL` → `translate.api.cloud.yandex.net` (был `api.cloud.yandex.net` → 404).
+- [x] 26. `api.py`: пример перенесён в Free Dictionary — `pick_definition`/`fetch_free_definition` возвращают `(definition, example)`; `parse_dictionary`/`fetch_yandex_dictionary` — только переводы.
+- [x] 27. `api.py`: `fetch_yandex_translate` отбрасывает ответ, равный исходному тексту (Cloud отдаёт его as-is для непереводимого).
+- [x] 28. `formatting.py`: `strip_leading_article` (a/an/to) + `sections_to_table` (таблица через `-` и `|`) вместо `sections_to_text`.
+- [x] 29. `handlers.py`: отброс ведущего артикля, `gather(free_definition, dictionary)`, вывод таблицей.
+- [x] 30. Тесты обновлены; живая проверка реальными API (слово/фраза/предложение/артикли/непереводимое) — ок, 59 тестов зелёные.
+
 ## Итоговая архитектура (пакет `bot/`)
 
 Логика разбита по модулям по функциональному признаку:
@@ -64,8 +78,8 @@ Dictionary** (переводы по частям речи + пример для 
 |---|---|
 | `main.py` (корень) | Тонкая точка входа: `asyncio.run(bot.app.main())`. |
 | `bot/config.py` | `BOT_TOKEN` и ключи Yandex из `.env`, константы URL (Translate/Dictionary/Free Dictionary), таймаут, `START_TEXT`, `setup_logging()`. |
-| `bot/api.py` | `fetch_yandex_translate()` (Cloud Translate), `fetch_yandex_dictionary()` + `parse_dictionary()` (словарь/части речи/пример), `fetch_free_definition()` + `pick_definition()` (определение). |
-| `bot/formatting.py` | `validate_input()`, `build_sections()` (секции `(kind, text)`), `sections_to_text()`. |
+| `bot/api.py` | `fetch_yandex_translate()` (Cloud Translate), `fetch_yandex_dictionary()` + `parse_dictionary()` (переводы по частям речи), `fetch_free_definition()` + `pick_definition()` (определение + пример). |
+| `bot/formatting.py` | `validate_input()`, `strip_leading_article()` (a/an/to), `build_sections()` (секции `(kind, text)`), `sections_to_table()` (таблица `-`/`|`). |
 | `bot/keyboards.py` | `build_copy_keyboard(sections)` + `SECTION_LABELS` — кнопка `CopyTextButton` на каждую секцию. |
 | `bot/handlers.py` | `cmd_start()` для `/start`, `handle_word()` (ветвление слово/фраза → секции + клавиатура), `register_handlers(dp)`. |
 | `bot/app.py` | `main()`: создаёт бота, диспетчер, общий HTTP-сеанс; проверяет секреты; запускает long-polling. |

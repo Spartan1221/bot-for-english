@@ -16,7 +16,12 @@ from .api import (
     fetch_yandex_translate,
 )
 from .config import START_TEXT
-from .formatting import build_sections, sections_to_text, validate_input
+from .formatting import (
+    build_sections,
+    sections_to_table,
+    strip_leading_article,
+    validate_input,
+)
 from .keyboards import build_copy_keyboard
 
 log = logging.getLogger(__name__)
@@ -30,7 +35,7 @@ async def cmd_start(message: Message) -> None:
 async def handle_word(
     message: Message, http_session: aiohttp.ClientSession
 ) -> None:
-    """Основная логика: проверка ввода → запросы к API → сборка секций → ответ."""
+    """Основная логика: проверка ввода → запросы к API → сборка секций → ответ-таблица."""
     # http_session приходит через dependency injection из dp["http_session"].
 
     # 1. Валидация ввода.
@@ -42,36 +47,38 @@ async def handle_word(
         )
         return
 
-    is_phrase = " " in query  # фраза = есть пробел внутри.
+    # 2. Отбрасываем ведущий артикль/частицу (a/an/to): 'to go' -> 'go'.
+    head = strip_leading_article(query)
+    is_phrase = " " in head  # фраза = внутри ещё есть пробел.
 
-    # 2. Запросы к API. Все вызовы best-effort: возвращают None/пусто при сбое.
+    # 3. Запросы к API. Все вызовы best-effort: возвращают None/пусто при сбое.
     if is_phrase:
         # Фразы нет в словаре — только машинный перевод, без примера и определения.
-        translation = await fetch_yandex_translate(http_session, query)
+        translation = await fetch_yandex_translate(http_session, head)
         example = None
         definition = None
     else:
-        # Отдельное слово: параллельно — словарь (переводы по частям речи + пример)
-        # и Free Dictionary (определение).
-        api_query = query.lower()
-        (variants, example), definition = await asyncio.gather(
-            fetch_yandex_dictionary(http_session, api_query),
+        # Отдельное слово: параллельно — Free Dictionary (определение + пример)
+        # и Yandex Dictionary (переводы по частям речи).
+        api_query = head.lower()
+        (definition, example), variants = await asyncio.gather(
             fetch_free_definition(http_session, api_query),
+            fetch_yandex_dictionary(http_session, api_query),
         )
         translation = ", ".join(variants) if variants else None
         # Слова нет в словаре — пробуем машинный перевод как фолбэк.
         if translation is None:
             translation = await fetch_yandex_translate(http_session, api_query)
 
-    # 3. Если перевода нет совсем — сообщаем, что перевести не удалось.
+    # 4. Если перевода нет совсем — сообщаем, что перевести не удалось.
     if not translation:
         await message.answer(f"Не удалось перевести «{query}». 😕")
         return
 
-    # 4. Сборка секций, текста и клавиатуры копирования.
-    sections = build_sections(query, example, translation, definition, is_phrase)
+    # 5. Сборка секций, табличный ответ и клавиатура копирования.
+    sections = build_sections(head, example, translation, definition, is_phrase)
     await message.answer(
-        sections_to_text(sections),
+        sections_to_table(sections),
         reply_markup=build_copy_keyboard(sections),
     )
 

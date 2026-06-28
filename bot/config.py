@@ -27,7 +27,8 @@ API_TIMEOUT = aiohttp.ClientTimeout(total=10)
 
 # Внешние сервисы.
 # Перевод (слова и предложения) — Yandex Cloud Translate.
-YANDEX_TRANSLATE_URL = "https://api.cloud.yandex.net/translate/v2/translate"
+# Хост именно translate.api.cloud.yandex.net (api.cloud.yandex.net отдаёт 404).
+YANDEX_TRANSLATE_URL = "https://translate.api.cloud.yandex.net/translate/v2/translate"
 # Переводы по частям речи + примеры для отдельных слов — Yandex Dictionary.
 YANDEX_DICT_URL = "https://dictionary.yandex.net/api/v1/dicservice.json/lookup"
 # Английское определение (значение) — Free Dictionary API.
