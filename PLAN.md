@@ -70,6 +70,21 @@ Cloud Translate → 404), не было примеров (Yandex Dictionary не
 - [x] 29. `handlers.py`: отброс ведущего артикля, `gather(free_definition, dictionary)`, вывод таблицей.
 - [x] 30. Тесты обновлены; живая проверка реальными API (слово/фраза/предложение/артикли/непереводимое) — ок, 59 тестов зелёные.
 
+## Дополнение 4: Microsoft Translator + артикли как части речи + разделитель вместо таблицы
+
+Табличный формат убран — секции теперь разделены строкой `-----`. Переводчик заменён:
+вместо **Yandex Cloud Translate** — **Microsoft (Azure) Translator**. Артикли стали указанием
+части речи: **a/an/the → существительное**, **to → глагол**, **без артикля → и существительное,
+и глагол** (плоско через запятую). Yandex Dictionary и Free Dictionary остались.
+
+- [x] 31. `config.py`: убрать `YANDEX_CLOUD_API_KEY`/`YANDEX_FOLDER_ID`/`YANDEX_TRANSLATE_URL`; добавить `AZURE_TRANSLATOR_KEY`/`AZURE_TRANSLATOR_REGION`/`AZURE_TRANSLATE_URL`.
+- [x] 32. `api.py`: `fetch_microsoft_translate` (POST Azure, заголовки `Ocp-Apim-Subscription-Key`/`-Region`, guard от echo); `parse_dictionary(data, allowed_pos)` с фильтром по частям речи; `fetch_yandex_dictionary(session, word, allowed_pos)`.
+- [x] 33. `formatting.py`: `classify_input` (a/an/the→noun, to→verb, без артикля→noun+verb, иначе фраза) вместо `strip_leading_article`; `sections_to_text` (разделитель `-----`) вместо `sections_to_table`.
+- [x] 34. `handlers.py`: классификация → поток (слово с фильтром POS / фраза), Azure-перевод.
+- [x] 35. `app.py` + `.env`: секреты Azure (`AZURE_TRANSLATOR_KEY`/`AZURE_TRANSLATOR_REGION`) + `YANDEX_DICT_API_KEY`.
+- [x] 36. Фикс баланса частей речи: лимит переводов делится поровну между запрошенными POS, чтобы noun и verb не вытесняли друг друга.
+- [x] 37. Тесты переписаны; живая проверка (слово/артикли a-an-the-to/фраза/предложение) — ок, 63 теста зелёные.
+
 ## Итоговая архитектура (пакет `bot/`)
 
 Логика разбита по модулям по функциональному признаку:
@@ -77,9 +92,9 @@ Cloud Translate → 404), не было примеров (Yandex Dictionary не
 | Модуль | Ответственность |
 |---|---|
 | `main.py` (корень) | Тонкая точка входа: `asyncio.run(bot.app.main())`. |
-| `bot/config.py` | `BOT_TOKEN` и ключи Yandex из `.env`, константы URL (Translate/Dictionary/Free Dictionary), таймаут, `START_TEXT`, `setup_logging()`. |
-| `bot/api.py` | `fetch_yandex_translate()` (Cloud Translate), `fetch_yandex_dictionary()` + `parse_dictionary()` (переводы по частям речи), `fetch_free_definition()` + `pick_definition()` (определение + пример). |
-| `bot/formatting.py` | `validate_input()`, `strip_leading_article()` (a/an/to), `build_sections()` (секции `(kind, text)`), `sections_to_table()` (таблица `-`/`|`). |
+| `bot/config.py` | `BOT_TOKEN`, ключи Azure Translator и Yandex Dictionary из `.env`, константы URL, таймаут, `START_TEXT`, `setup_logging()`. |
+| `bot/api.py` | `fetch_microsoft_translate()` (Azure), `fetch_yandex_dictionary()` + `parse_dictionary(allowed_pos)` (переводы по частям речи), `fetch_free_definition()` + `pick_definition()` (определение + пример). |
+| `bot/formatting.py` | `validate_input()`, `classify_input()` (артикль → часть речи), `build_sections()`, `sections_to_text()` (разделитель `-----`). |
 | `bot/keyboards.py` | `build_copy_keyboard(sections)` + `SECTION_LABELS` — кнопка `CopyTextButton` на каждую секцию. |
 | `bot/handlers.py` | `cmd_start()` для `/start`, `handle_word()` (ветвление слово/фраза → секции + клавиатура), `register_handlers(dp)`. |
 | `bot/app.py` | `main()`: создаёт бота, диспетчер, общий HTTP-сеанс; проверяет секреты; запускает long-polling. |

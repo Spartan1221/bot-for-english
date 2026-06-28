@@ -28,30 +28,31 @@ async def test_handle_word_rejects_empty():
     assert "только буквы" in message.answer.call_args.args[0]
 
 
-async def test_handle_word_word_path(monkeypatch):
-    # Free Dictionary отдал определение + пример, Yandex Dictionary — варианты перевода.
+async def test_handle_word_no_article_both_pos(monkeypatch):
+    # Слово без артикля → ищем и noun, и verb.
     async def fake_free_definition(session, word):
         return ("a group of things", "a set of tools")
 
-    async def fake_dictionary(session, word):
+    seen = {}
+
+    async def fake_dictionary(session, word, allowed_pos):
+        seen["word"], seen["pos"] = word, allowed_pos
         return ["набор", "множество"]
 
     translate = AsyncMock(return_value="не должно зваться")
     monkeypatch.setattr(h, "fetch_free_definition", fake_free_definition)
     monkeypatch.setattr(h, "fetch_yandex_dictionary", fake_dictionary)
-    monkeypatch.setattr(h, "fetch_yandex_translate", translate)
+    monkeypatch.setattr(h, "fetch_microsoft_translate", translate)
 
     message = AsyncMock()
     message.text = "set"
     await h.handle_word(message, http_session=AsyncMock())
 
     translate.assert_not_called()  # словарь дал варианты — перевод не нужен
+    assert seen == {"word": "set", "pos": ["noun", "verb"]}
 
     text = message.answer.call_args.args[0]
-    # Ответ — таблица, содержащая все три секции.
-    for value in ("set (a set of tools)", "набор, множество", "a group of things"):
-        assert value in text
-    assert "|" in text
+    assert text == "set (a set of tools)\n-----\nнабор, множество\n-----\na group of things"
 
     markup = message.answer.call_args.kwargs["reply_markup"]
     assert len(markup.inline_keyboard) == 3
@@ -60,11 +61,37 @@ async def test_handle_word_word_path(monkeypatch):
     assert markup.inline_keyboard[2][0].copy_text.text == "a group of things"
 
 
+async def test_handle_word_article_selects_pos(monkeypatch):
+    # 'a book' → артикль a → только noun; 'to book' → только verb.
+    seen = {}
+
+    async def fake_free_definition(session, word):
+        return (None, None)
+
+    async def fake_dictionary(session, word, allowed_pos):
+        seen[word] = allowed_pos
+        return [f"перевод-{word}-{'-'.join(allowed_pos)}"]
+
+    monkeypatch.setattr(h, "fetch_free_definition", fake_free_definition)
+    monkeypatch.setattr(h, "fetch_yandex_dictionary", fake_dictionary)
+    monkeypatch.setattr(h, "fetch_microsoft_translate", AsyncMock(return_value=None))
+
+    for raw, expected_pos in [("a book", ["noun"]), ("to book", ["verb"])]:
+        message = AsyncMock()
+        message.text = raw
+        await h.handle_word(message, http_session=AsyncMock())
+        assert seen["book"] == expected_pos
+        text = message.answer.call_args.args[0]
+        # Голова слова без артикля; перевод соответствует выбранной части речи.
+        assert text.startswith("book")
+        assert f"перевод-book-{'-'.join(expected_pos)}" in text
+
+
 async def test_handle_word_phrase_path(monkeypatch):
     translate = AsyncMock(return_value="доброе утро")
     dictionary = AsyncMock(return_value=[])
     free_def = AsyncMock(return_value=(None, None))
-    monkeypatch.setattr(h, "fetch_yandex_translate", translate)
+    monkeypatch.setattr(h, "fetch_microsoft_translate", translate)
     monkeypatch.setattr(h, "fetch_yandex_dictionary", dictionary)
     monkeypatch.setattr(h, "fetch_free_definition", free_def)
 
@@ -72,43 +99,16 @@ async def test_handle_word_phrase_path(monkeypatch):
     message.text = "good morning"
     await h.handle_word(message, http_session=AsyncMock())
 
-    # Для фразы звать только перевод.
+    # Для фразы зовём только машинный перевод.
     translate.assert_called_once()
     dictionary.assert_not_called()
     free_def.assert_not_called()
 
     text = message.answer.call_args.args[0]
-    assert "good morning" in text
-    assert "доброе утро" in text
+    assert text == "good morning\n-----\nдоброе утро"
     markup = message.answer.call_args.kwargs["reply_markup"]
     assert len(markup.inline_keyboard) == 2
     assert markup.inline_keyboard[0][0].text == "📋 Фраза"
-
-
-async def test_handle_word_strips_article(monkeypatch):
-    # 'to go' должно искать слово 'go' (артикль/частица отброшена).
-    seen = {}
-
-    async def fake_free_definition(session, word):
-        seen["word"] = word
-        return (None, None)
-
-    async def fake_dictionary(session, word):
-        seen["word"] = word
-        return [f"перевод-{word}"]
-
-    monkeypatch.setattr(h, "fetch_free_definition", fake_free_definition)
-    monkeypatch.setattr(h, "fetch_yandex_dictionary", fake_dictionary)
-    monkeypatch.setattr(h, "fetch_yandex_translate", AsyncMock(return_value=None))
-
-    message = AsyncMock()
-    message.text = "to go"
-    await h.handle_word(message, http_session=AsyncMock())
-
-    assert seen["word"] == "go"  # lookup шёл по голове слова, а не по 'to go'
-    text = message.answer.call_args.args[0]
-    assert "перевод-go" in text
-    assert "to go" not in text  # отброшенная частица в ответе не видна
 
 
 async def test_handle_word_fallback_to_translate(monkeypatch):
@@ -116,13 +116,13 @@ async def test_handle_word_fallback_to_translate(monkeypatch):
     async def fake_free_definition(session, word):
         return (None, None)
 
-    async def fake_dictionary(session, word):
+    async def fake_dictionary(session, word, allowed_pos):
         return []
 
     translate = AsyncMock(return_value="перевод")
     monkeypatch.setattr(h, "fetch_free_definition", fake_free_definition)
     monkeypatch.setattr(h, "fetch_yandex_dictionary", fake_dictionary)
-    monkeypatch.setattr(h, "fetch_yandex_translate", translate)
+    monkeypatch.setattr(h, "fetch_microsoft_translate", translate)
 
     message = AsyncMock()
     message.text = "obscure"
@@ -130,12 +130,12 @@ async def test_handle_word_fallback_to_translate(monkeypatch):
 
     translate.assert_called_once()
     text = message.answer.call_args.args[0]
-    assert "obscure" in text and "перевод" in text  # ни примера, ни значения
+    assert text == "obscure\n-----\nперевод"
 
 
 async def test_handle_word_no_translation_error(monkeypatch):
     translate = AsyncMock(return_value=None)
-    monkeypatch.setattr(h, "fetch_yandex_translate", translate)
+    monkeypatch.setattr(h, "fetch_microsoft_translate", translate)
 
     message = AsyncMock()
     message.text = "good morning"  # фраза: единственный источник — перевод
