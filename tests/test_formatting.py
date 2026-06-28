@@ -67,6 +67,11 @@ class TestStripLeadingArticle:
         assert strip_leading_article("to") == "to"
         assert strip_leading_article("a") == "a"
 
+    def test_tolerates_extra_whitespace(self):
+        # Устойчиво к двойным пробелам/табам (хотя validate_input их уже схлопывает).
+        assert strip_leading_article("to  go") == "go"
+        assert strip_leading_article("a\tbook") == "book"
+
 
 class TestBuildSections:
     def test_word_full(self):

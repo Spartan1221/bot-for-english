@@ -28,7 +28,7 @@ def build_copy_keyboard(sections: list[tuple[str, str]]) -> InlineKeyboardMarkup
     """
     rows = []
     for kind, text in sections:
-        label = SECTION_LABELS[kind]
+        label = SECTION_LABELS.get(kind, kind.capitalize())
         rows.append(
             [InlineKeyboardButton(text=label, copy_text=CopyTextButton(text=text))]
         )
