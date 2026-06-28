@@ -39,8 +39,10 @@ def strip_leading_article(query: str) -> str:
 
     'to go' -> 'go', 'a book' -> 'book', 'an apple' -> 'apple'.
     Одиночный артикль ('a', 'to') и фразы без артикля ('good morning') не меняет.
+    Устойчива к любым пробельным разделителям (split() без аргумента) — хотя на вход
+    обычно поступает уже нормализованный запрос из validate_input.
     """
-    parts = query.split(" ")
+    parts = query.split()
     if len(parts) >= 2 and parts[0].lower() in LEADING_PARTICLES:
         return " ".join(parts[1:])
     return query
@@ -90,7 +92,7 @@ def sections_to_table(sections: list[tuple[str, str]]) -> str:
         return ""
 
     rows = [("Часть", "Содержимое")]
-    rows += [(TABLE_LABELS[kind], text) for kind, text in sections]
+    rows += [(TABLE_LABELS.get(kind, kind.capitalize()), text) for kind, text in sections]
 
     w_label = max(len(label) for label, _ in rows)
     w_value = max(len(value) for _, value in rows)
