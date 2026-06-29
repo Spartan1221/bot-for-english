@@ -12,8 +12,8 @@ from aiogram.types import Message
 
 from .api import (
     fetch_free_definition,
-    fetch_microsoft_translate,
     fetch_yandex_dictionary,
+    fetch_yandex_translate,
 )
 from .config import START_TEXT
 from .formatting import build_sections, classify_input, sections_to_text, validate_input
@@ -49,7 +49,7 @@ async def handle_word(
     # 3. Запросы к API. Все вызовы best-effort: возвращают None/пусто при сбое.
     if is_phrase:
         # Фразы нет в словаре — только машинный перевод, без примера и определения.
-        translation = await fetch_microsoft_translate(http_session, head)
+        translation = await fetch_yandex_translate(http_session, head)
         example = None
         definition = None
     else:
@@ -63,7 +63,7 @@ async def handle_word(
         translation = ", ".join(variants) if variants else None
         # Слова нет в словаре — пробуем машинный перевод как фолбэк.
         if translation is None:
-            translation = await fetch_microsoft_translate(http_session, api_query)
+            translation = await fetch_yandex_translate(http_session, api_query)
 
     # 4. Если перевода нет совсем — сообщаем, что перевести не удалось.
     if not translation:

@@ -14,9 +14,9 @@ load_dotenv()
 # Токен Telegram-бота из .env.
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-# Microsoft (Azure) Translator: ключ и регион ресурса. Нужны для перевода слов и фраз.
-AZURE_TRANSLATOR_KEY = os.getenv("AZURE_TRANSLATOR_KEY")
-AZURE_TRANSLATOR_REGION = os.getenv("AZURE_TRANSLATOR_REGION")
+# Yandex Cloud Translate: API-ключ и каталог (folder). Нужны для перевода слов и фраз.
+YANDEX_CLOUD_API_KEY = os.getenv("YANDEX_CLOUD_API_KEY")
+YANDEX_FOLDER_ID = os.getenv("YANDEX_FOLDER_ID")
 
 # Классический Yandex Dictionary: отдельный API-ключ. Нужен для переводов по частям
 # речи для отдельных слов.
@@ -26,10 +26,9 @@ YANDEX_DICT_API_KEY = os.getenv("YANDEX_DICT_API_KEY")
 API_TIMEOUT = aiohttp.ClientTimeout(total=10)
 
 # Внешние сервисы.
-# Перевод (слова и предложения) — Microsoft (Azure) Translator.
-AZURE_TRANSLATE_URL = (
-    "https://api.cognitive.microsofttranslator.com/translate?api-version=3.0&from=en&to=ru"
-)
+# Перевод (слова и предложения) — Yandex Cloud Translate.
+# Хост именно translate.api.cloud.yandex.net (api.cloud.yandex.net отдаёт 404).
+YANDEX_TRANSLATE_URL = "https://translate.api.cloud.yandex.net/translate/v2/translate"
 # Переводы по частям речи для отдельных слов — Yandex Dictionary.
 YANDEX_DICT_URL = "https://dictionary.yandex.net/api/v1/dicservice.json/lookup"
 # Английское определение (значение) + пример — Free Dictionary API.

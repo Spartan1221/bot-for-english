@@ -1,4 +1,4 @@
-"""Слой взаимодействия с внешними API: Microsoft (Azure) Translator, Yandex Dictionary, Free Dictionary."""
+"""Слой взаимодействия с внешними API: Yandex Cloud Translate, Yandex Dictionary, Free Dictionary."""
 
 from __future__ import annotations
 
@@ -8,12 +8,12 @@ import logging
 import aiohttp
 
 from .config import (
-    AZURE_TRANSLATE_URL,
-    AZURE_TRANSLATOR_KEY,
-    AZURE_TRANSLATOR_REGION,
     DICT_URL,
+    YANDEX_CLOUD_API_KEY,
     YANDEX_DICT_API_KEY,
     YANDEX_DICT_URL,
+    YANDEX_FOLDER_ID,
+    YANDEX_TRANSLATE_URL,
 )
 
 log = logging.getLogger(__name__)
@@ -23,38 +23,39 @@ MAX_TRANSLATIONS = 8
 
 
 # --------------------------------------------------------------------------- #
-#  Microsoft (Azure) Translator — перевод слов и предложений
+#  Yandex Cloud Translate — перевод слов и предложений
 # --------------------------------------------------------------------------- #
-async def fetch_microsoft_translate(
+async def fetch_yandex_translate(
     session: aiohttp.ClientSession, text: str
 ) -> str | None:
     """
-    Перевод текста (слово или фраза) с английского на русский через Microsoft Translator.
+    Перевод текста (слово или фраза) с английского на русский через Yandex Cloud Translate.
 
     Best-effort: при любой ошибке сети/таймаута/квоты возвращает None, чтобы отсутствие
     перевода не ломало формирование ответа.
     """
-    headers = {
-        "Ocp-Apim-Subscription-Key": AZURE_TRANSLATOR_KEY,
-        "Ocp-Apim-Subscription-Region": AZURE_TRANSLATOR_REGION,
-        "Content-Type": "application/json",
+    headers = {"Authorization": f"Api-Key {YANDEX_CLOUD_API_KEY}"}
+    body = {
+        "folderId": YANDEX_FOLDER_ID,
+        "texts": [text],
+        "sourceLanguageCode": "en",
+        "targetLanguageCode": "ru",
     }
-    body = [{"Text": text}]
     try:
-        async with session.post(AZURE_TRANSLATE_URL, headers=headers, json=body) as resp:
+        async with session.post(YANDEX_TRANSLATE_URL, headers=headers, json=body) as resp:
             resp.raise_for_status()
             data = await resp.json()
     except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as exc:
-        log.warning("Microsoft Translator не сработал для %r: %s", text, exc)
+        log.warning("Yandex Translate не сработал для %r: %s", text, exc)
         return None
 
     try:
-        translated = data[0]["translations"][0]["text"].strip()
+        translated = data["translations"][0]["text"].strip()
     except (KeyError, IndexError, TypeError, AttributeError):
-        log.warning("Неожиданный ответ Microsoft Translator для %r: %s", text, data)
+        log.warning("Неожиданный ответ Yandex Translate для %r: %s", text, data)
         return None
     if not translated or translated.lower() == text.strip().lower():
-        # Переводчик может вернуть исходный текст как есть для непереводимого ввода.
+        # Yandex Translate может вернуть исходный текст как есть для непереводимого ввода.
         return None
     return translated
 
