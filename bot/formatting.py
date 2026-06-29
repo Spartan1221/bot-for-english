@@ -27,18 +27,19 @@ def validate_input(text: str | None) -> str | None:
     return cleaned if INPUT_RE.match(cleaned) else None
 
 
-def classify_input(query: str) -> tuple[str, list[str], bool]:
+def classify_input(query: str) -> tuple[str, list[str] | None, bool]:
     """
     Определяет, что искать — отдельное слово (с фильтром по части речи) или фразу.
 
     Возвращает (голова, allowed_pos, is_phrase):
     - `'<article> <word>'`: a/an/the → слово, только noun; to → слово, только verb.
-    - одиночное слово без артикля → слово, и noun и verb.
+    - одиночное слово без артикля → слово, allowed_pos = None (все части речи: noun,
+      verb, прилагательное и т.д. — чтобы прилагательные получали несколько переводов).
     - иначе (2+ слова без ведущего артикля / предложение) → фраза, allowed_pos = [].
     """
     tokens = query.split()
     if len(tokens) == 1:
-        return tokens[0], ["noun", "verb"], False
+        return tokens[0], None, False
     if len(tokens) == 2 and tokens[0].lower() in ARTICLE_POS:
         return tokens[1], [ARTICLE_POS[tokens[0].lower()]], False
     return query, [], True

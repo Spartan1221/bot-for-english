@@ -44,8 +44,9 @@ class TestValidateInput:
 
 
 class TestClassifyInput:
-    def test_single_word_both_pos(self):
-        assert classify_input("set") == ("set", ["noun", "verb"], False)
+    def test_single_word_all_pos(self):
+        # Слово без артикля — все присутствующие части речи (None).
+        assert classify_input("set") == ("set", None, False)
 
     def test_article_noun(self):
         assert classify_input("a book") == ("book", ["noun"], False)
@@ -60,8 +61,8 @@ class TestClassifyInput:
         assert classify_input("TO GO") == ("GO", ["verb"], False)
 
     def test_single_article_treated_as_word(self):
-        # Одиночный артикль — это слово, классифицируется как «и noun, и verb».
-        assert classify_input("to") == ("to", ["noun", "verb"], False)
+        # Одиночный артикль — это слово, без артикля → все части речи (None).
+        assert classify_input("to") == ("to", None, False)
 
     def test_phrase(self):
         assert classify_input("good morning") == ("good morning", [], True)
