@@ -14,6 +14,7 @@ from .api import (
     fetch_free_definition,
     fetch_yandex_dictionary,
     fetch_yandex_translate,
+    parse_dictionary,
 )
 from .config import START_TEXT
 from .formatting import build_sections, classify_input, sections_to_text, validate_input
@@ -54,12 +55,14 @@ async def handle_word(
         definition = None
     else:
         # Отдельное слово: параллельно — Free Dictionary (определение + пример)
-        # и Yandex Dictionary (переводы нужных частей речи).
+        # и Yandex Dictionary (сырая статья). Переводы фильтруем по части речи
+        # (для слова без артикля — все присутствующие: noun, verb, прилагательное и т.д.).
         api_query = head.lower()
-        (definition, example), variants = await asyncio.gather(
+        (definition, example), data = await asyncio.gather(
             fetch_free_definition(http_session, api_query),
-            fetch_yandex_dictionary(http_session, api_query, allowed_pos),
+            fetch_yandex_dictionary(http_session, api_query),
         )
+        variants = parse_dictionary(data, allowed_pos)
         translation = ", ".join(variants) if variants else None
         # Слова нет в словаре — пробуем машинный перевод как фолбэк.
         if translation is None:

@@ -63,61 +63,80 @@ async def fetch_yandex_translate(
 # --------------------------------------------------------------------------- #
 #  Yandex Dictionary — переводы отдельного слова, отфильтрованные по части речи
 # --------------------------------------------------------------------------- #
-def parse_dictionary(data: dict, allowed_pos: list[str]) -> list[str]:
+def parse_dictionary(data: dict, allowed_pos: list[str] | None) -> list[str]:
     """
-    Варианты перевода из ответа Yandex Dictionary, отфильтрованные по частям речи.
+    Варианты перевода из ответа Yandex Dictionary.
 
-    `allowed_pos` — упорядоченный список (напр. ["noun"], ["verb"], ["noun", "verb"]);
-    порядок задаёт очерёдность групп в выводе (noun раньше verb). Берутся
-    def[].tr[].text и их синонимы def[].tr[].syn[].text. Лимит делится поровну между
-    запрошенными частями речи (MAX_TRANSLATIONS // len(allowed_pos) на каждую), чтобы
-    при «noun + verb» обе группы гарантированно попали в ответ, а не вытесняли друг друга.
-    Дедуп — глобальный.
+    `allowed_pos`:
+    - список частей речи (напр. ["noun"], ["verb"]) — переводим только их;
+    - None — все присутствующие в статье части речи (для слова без артикля:
+      существительное, глагол, прилагательное и т.д.).
+
+    Лимит MAX_TRANSLATIONS делится поровну между обрабатываемыми частями речи
+    (запрошенными из списка либо всеми присутствующими при None), чтобы ни одна не
+    вытесняла другую: для «set» без артикля видны и существительные, и глаголы, а для
+    прилагательного «happy» — все его переводы. Дедуп — глобальный.
     """
-    per_pos = max(1, MAX_TRANSLATIONS // max(1, len(allowed_pos)))
+    all_defs = data.get("def", [])
+
+    if allowed_pos is None:
+        # Все присутствующие части речи в порядке появления в статье.
+        pos_order: list[str] = []
+        for def_entry in all_defs:
+            pos = def_entry.get("pos")
+            if pos and pos not in pos_order:
+                pos_order.append(pos)
+    else:
+        pos_order = list(allowed_pos)
+
+    per_pos = max(1, MAX_TRANSLATIONS // max(1, len(pos_order)))
     result: list[str] = []
     seen: set[str] = set()
-    for pos in allowed_pos:
-        group: list[str] = []
-        for def_entry in data.get("def", []):
+
+    def add_up_to(pos: str, limit: int) -> None:
+        added = 0
+        for def_entry in all_defs:
             if def_entry.get("pos") != pos:
                 continue
             for tr in def_entry.get("tr", []):
-                candidates = [tr.get("text")]
-                candidates += [syn.get("text") for syn in tr.get("syn", [])]
+                if added >= limit:
+                    return
+                candidates = [tr.get("text")] + [syn.get("text") for syn in tr.get("syn", [])]
                 for cand in candidates:
-                    if cand and cand not in seen and len(group) < per_pos:
+                    if added >= limit:
+                        return
+                    if cand and cand not in seen:
                         seen.add(cand)
-                        group.append(cand)
-                if len(group) >= per_pos:
-                    break
-            if len(group) >= per_pos:
-                break
-        result.extend(group)
+                        result.append(cand)
+                        added += 1
+
+    for pos in pos_order:
+        add_up_to(pos, per_pos)
     return result
 
 
 async def fetch_yandex_dictionary(
-    session: aiohttp.ClientSession, word: str, allowed_pos: list[str]
-) -> list[str]:
+    session: aiohttp.ClientSession, word: str
+) -> dict:
     """
-    Словарный lookup слова в Yandex Dictionary с фильтром по частям речи.
+    Словарный lookup слова в Yandex Dictionary.
 
-    Возвращает [], если статьи нет (404/пустой def) или при ошибке сети — не критично,
-    фолбэком послужит машинный перевод.
+    Возвращает «сырой» ответ (dict со статьёй) для последующей фильтрации через
+    parse_dictionary; {} при отсутствии статьи (404/пусто) или ошибке сети — не
+    критично, фолбэком послужит машинный перевод.
     """
     params = {"key": YANDEX_DICT_API_KEY, "lang": "en-ru", "text": word}
     try:
         async with session.get(YANDEX_DICT_URL, params=params) as resp:
             if resp.status == 404:
-                return []
+                return {}
             resp.raise_for_status()
             data = await resp.json()
     except (aiohttp.ClientError, asyncio.TimeoutError, ValueError) as exc:
         log.warning("Yandex Dictionary не сработал для %r: %s", word, exc)
-        return []
+        return {}
 
-    return parse_dictionary(data or {}, allowed_pos)
+    return data or {}
 
 
 # --------------------------------------------------------------------------- #

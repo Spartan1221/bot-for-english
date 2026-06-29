@@ -64,6 +64,28 @@ class TestParseDictionary:
         assert any(x.startswith("n") for x in out)
         assert any(x.startswith("v") for x in out)
 
+    def test_all_pos_none_includes_adjective(self):
+        # None — все присутствующие части речи (слово без артикля).
+        data = {"def": [
+            {"pos": "adjective", "tr": [{"text": "счастливый"}, {"text": "довольный"}, {"text": "приятный"}]},
+            {"pos": "noun", "tr": [{"text": "счастливец"}]},
+        ]}
+        out = parse_dictionary(data, None)
+        # прилагательные дают несколько переводов; баланс — и существительное видно.
+        assert "счастливый" in out and "довольный" in out and "приятный" in out
+        assert "счастливец" in out
+
+    def test_all_pos_none_balanced(self):
+        # set-подобное: noun + verb, обе части речи видны при None.
+        data = {"def": [
+            {"pos": "noun", "tr": [{"text": f"n{i}"} for i in range(6)]},
+            {"pos": "verb", "tr": [{"text": f"v{i}"} for i in range(6)]},
+        ]}
+        out = parse_dictionary(data, None)
+        assert len(out) == 8
+        assert any(x.startswith("n") for x in out)
+        assert any(x.startswith("v") for x in out)
+
 
 # --------------------------------------------------------------------------- #
 #  pick_definition — чистая функция (определение + пример)
@@ -148,19 +170,15 @@ class TestFetchYandexTranslate:
 
 
 # --------------------------------------------------------------------------- #
-#  fetch_yandex_dictionary — GET с фильтром по частям речи, best-effort
+#  fetch_yandex_dictionary — GET, возвращает сырую статью (dict), best-effort
 # --------------------------------------------------------------------------- #
 class TestFetchYandexDictionary:
-    async def test_found_with_pos_filter(self, fake_session_factory, make_response):
-        data = {"def": [
-            {"pos": "noun", "tr": [{"text": "книга"}]},
-            {"pos": "verb", "tr": [{"text": "бронировать"}]},
-        ]}
+    async def test_found_returns_raw(self, fake_session_factory, make_response):
+        data = {"def": [{"pos": "noun", "tr": [{"text": "книга"}]}]}
         session = fake_session_factory({
             "dictionary.yandex.net": make_response(status=200, json_data=data),
         })
-        # Запросили только существительные переводы.
-        assert await fetch_yandex_dictionary(session, "book", ["noun"]) == ["книга"]
+        assert await fetch_yandex_dictionary(session, "book") == data
         assert session.requests[0]["params"]["lang"] == "en-ru"
         assert session.requests[0]["params"]["text"] == "book"
 
@@ -168,19 +186,21 @@ class TestFetchYandexDictionary:
         session = fake_session_factory({
             "dictionary.yandex.net": make_response(status=404, json_data={"def": []}),
         })
-        assert await fetch_yandex_dictionary(session, "asdfqwerty", ["noun", "verb"]) == []
+        assert await fetch_yandex_dictionary(session, "asdfqwerty") == {}
 
     async def test_empty_def(self, fake_session_factory, make_response):
+        # Пустая статья возвращается как есть; фильтрация (parse_dictionary) даст [].
+        data = {"def": []}
         session = fake_session_factory({
-            "dictionary.yandex.net": make_response(status=200, json_data={"def": []}),
+            "dictionary.yandex.net": make_response(status=200, json_data=data),
         })
-        assert await fetch_yandex_dictionary(session, "x", ["noun"]) == []
+        assert await fetch_yandex_dictionary(session, "x") == data
 
     async def test_error_returns_empty(self, fake_session_factory, make_response):
         session = fake_session_factory({
             "dictionary.yandex.net": make_response(enter_exc=asyncio.TimeoutError()),
         })
-        assert await fetch_yandex_dictionary(session, "x", ["noun"]) == []
+        assert await fetch_yandex_dictionary(session, "x") == {}
 
 
 # --------------------------------------------------------------------------- #
