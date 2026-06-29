@@ -85,6 +85,19 @@ Cloud Translate → 404), не было примеров (Yandex Dictionary не
 - [x] 36. Фикс баланса частей речи: лимит переводов делится поровну между запрошенными POS, чтобы noun и verb не вытесняли друг друга.
 - [x] 37. Тесты переписаны; живая проверка (слово/артикли a-an-the-to/фраза/предложение) — ок, 63 теста зелёные.
 
+## Дополнение 5: возврат на Yandex Cloud Translate (откат провайдера)
+
+Azure из РФ недоступен (санкции/оплата), а классический API Переводчика Яндекс больше не выдаёт
+ключи. Поэтому провайдер перевода возвращён на **Yandex Cloud Translate** (`translate.api.cloud.yandex.net`,
+`Api-Key` + `folderId`). Все изменения «Дополнения 4» по формату и артиклям **сохранены**:
+разделитель `-----`, `classify_input` (a/an/the→noun, to→verb, без артикля→noun+verb), баланс лимита
+по частям речи.
+
+- [x] 38. `config.py`/`api.py`: `fetch_microsoft_translate` → `fetch_yandex_translate` (POST Cloud, `Authorization: Api-Key`, `folderId`), импорты и константы.
+- [x] 39. `handlers.py`: вызовы перевода на `fetch_yandex_translate`.
+- [x] 40. `app.py` + `.env`: секреты `YANDEX_CLOUD_API_KEY`/`YANDEX_FOLDER_ID` (+ `YANDEX_DICT_API_KEY`).
+- [x] 41. Тесты (`test_api`/`test_handlers`) возвращены на Cloud; 63 теста зелёные, live-проверка ок.
+
 ## Итоговая архитектура (пакет `bot/`)
 
 Логика разбита по модулям по функциональному признаку:
@@ -92,8 +105,8 @@ Cloud Translate → 404), не было примеров (Yandex Dictionary не
 | Модуль | Ответственность |
 |---|---|
 | `main.py` (корень) | Тонкая точка входа: `asyncio.run(bot.app.main())`. |
-| `bot/config.py` | `BOT_TOKEN`, ключи Azure Translator и Yandex Dictionary из `.env`, константы URL, таймаут, `START_TEXT`, `setup_logging()`. |
-| `bot/api.py` | `fetch_microsoft_translate()` (Azure), `fetch_yandex_dictionary()` + `parse_dictionary(allowed_pos)` (переводы по частям речи), `fetch_free_definition()` + `pick_definition()` (определение + пример). |
+| `bot/config.py` | `BOT_TOKEN`, ключи Yandex Cloud Translate и Yandex Dictionary из `.env`, константы URL, таймаут, `START_TEXT`, `setup_logging()`. |
+| `bot/api.py` | `fetch_yandex_translate()` (Cloud Translate), `fetch_yandex_dictionary()` + `parse_dictionary(allowed_pos)` (переводы по частям речи), `fetch_free_definition()` + `pick_definition()` (определение + пример). |
 | `bot/formatting.py` | `validate_input()`, `classify_input()` (артикль → часть речи), `build_sections()`, `sections_to_text()` (разделитель `-----`). |
 | `bot/keyboards.py` | `build_copy_keyboard(sections)` + `SECTION_LABELS` — кнопка `CopyTextButton` на каждую секцию. |
 | `bot/handlers.py` | `cmd_start()` для `/start`, `handle_word()` (ветвление слово/фраза → секции + клавиатура), `register_handlers(dp)`. |

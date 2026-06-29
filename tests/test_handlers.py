@@ -42,7 +42,7 @@ async def test_handle_word_no_article_both_pos(monkeypatch):
     translate = AsyncMock(return_value="не должно зваться")
     monkeypatch.setattr(h, "fetch_free_definition", fake_free_definition)
     monkeypatch.setattr(h, "fetch_yandex_dictionary", fake_dictionary)
-    monkeypatch.setattr(h, "fetch_microsoft_translate", translate)
+    monkeypatch.setattr(h, "fetch_yandex_translate", translate)
 
     message = AsyncMock()
     message.text = "set"
@@ -74,7 +74,7 @@ async def test_handle_word_article_selects_pos(monkeypatch):
 
     monkeypatch.setattr(h, "fetch_free_definition", fake_free_definition)
     monkeypatch.setattr(h, "fetch_yandex_dictionary", fake_dictionary)
-    monkeypatch.setattr(h, "fetch_microsoft_translate", AsyncMock(return_value=None))
+    monkeypatch.setattr(h, "fetch_yandex_translate", AsyncMock(return_value=None))
 
     for raw, expected_pos in [("a book", ["noun"]), ("to book", ["verb"])]:
         message = AsyncMock()
@@ -91,7 +91,7 @@ async def test_handle_word_phrase_path(monkeypatch):
     translate = AsyncMock(return_value="доброе утро")
     dictionary = AsyncMock(return_value=[])
     free_def = AsyncMock(return_value=(None, None))
-    monkeypatch.setattr(h, "fetch_microsoft_translate", translate)
+    monkeypatch.setattr(h, "fetch_yandex_translate", translate)
     monkeypatch.setattr(h, "fetch_yandex_dictionary", dictionary)
     monkeypatch.setattr(h, "fetch_free_definition", free_def)
 
@@ -122,7 +122,7 @@ async def test_handle_word_fallback_to_translate(monkeypatch):
     translate = AsyncMock(return_value="перевод")
     monkeypatch.setattr(h, "fetch_free_definition", fake_free_definition)
     monkeypatch.setattr(h, "fetch_yandex_dictionary", fake_dictionary)
-    monkeypatch.setattr(h, "fetch_microsoft_translate", translate)
+    monkeypatch.setattr(h, "fetch_yandex_translate", translate)
 
     message = AsyncMock()
     message.text = "obscure"
@@ -135,7 +135,7 @@ async def test_handle_word_fallback_to_translate(monkeypatch):
 
 async def test_handle_word_no_translation_error(monkeypatch):
     translate = AsyncMock(return_value=None)
-    monkeypatch.setattr(h, "fetch_microsoft_translate", translate)
+    monkeypatch.setattr(h, "fetch_yandex_translate", translate)
 
     message = AsyncMock()
     message.text = "good morning"  # фраза: единственный источник — перевод

@@ -61,9 +61,9 @@ pip install -r requirements.txt
 ```env
 BOT_TOKEN=123456789:AAH...ваш-реальный-токен...
 
-# Microsoft (Azure) Translator — перевод слов и фраз
-AZURE_TRANSLATOR_KEY=ваш-ключ-Azure-Translator
-AZURE_TRANSLATOR_REGION=регион-ресурса-напр-westeurope
+# Yandex Cloud Translate — перевод слов и фраз
+YANDEX_CLOUD_API_KEY=ваш-ключ-Yandex-Cloud-Translate
+YANDEX_FOLDER_ID=id-каталога-Yandex-Cloud
 
 # Yandex Dictionary — переводы по частям речи для слов
 YANDEX_DICT_API_KEY=ваш-ключ-Yandex-Dictionary
@@ -72,10 +72,12 @@ YANDEX_DICT_API_KEY=ваш-ключ-Yandex-Dictionary
 
 #### 2.4.1. Получение ключей
 
-**Microsoft (Azure) Translator** (`AZURE_TRANSLATOR_KEY`, `AZURE_TRANSLATOR_REGION`):
-1. В [портале Azure](https://portal.azure.com/) создайте ресурс **Translator** (ценовая категория F0 — бесплатный лимит).
-2. В разделе «Ключи и конечная точка» скопируйте **KEY 1** → это `AZURE_TRANSLATOR_KEY`, и **LOCATION/REGION** → это `AZURE_TRANSLATOR_REGION`.
-Подробно: [документация Translator](https://learn.microsoft.com/azure/ai-services/translator/).
+**Yandex Cloud Translate** (`YANDEX_CLOUD_API_KEY`, `YANDEX_FOLDER_ID`):
+1. Зарегистрируйтесь в [Yandex Cloud](https://cloud.yandex.ru/) и создайте платёжный аккаунт (есть бесплатный стартовый грант; для физлиц работает из РФ).
+2. В консоли выберите каталог и скопируйте его **id** → это `YANDEX_FOLDER_ID`.
+3. Создайте **сервисный аккаунт** в этом каталоге и выдайте ему роль `ai.translate.user` (исполнитель Translate).
+4. Для сервисного аккаунта создайте **API-ключ** → это `YANDEX_CLOUD_API_KEY`.
+Подробно: [документация Translate](https://cloud.yandex.ru/docs/translate/).
 
 **Yandex Dictionary** (`YANDEX_DICT_API_KEY`):
 1. Откройте [yandex.ru/dev/dictionary](https://yandex.ru/dev/dictionary) и нажмите «Получить ключ».

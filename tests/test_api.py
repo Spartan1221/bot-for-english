@@ -8,8 +8,8 @@ import aiohttp
 
 from bot.api import (
     fetch_free_definition,
-    fetch_microsoft_translate,
     fetch_yandex_dictionary,
+    fetch_yandex_translate,
     parse_dictionary,
     pick_definition,
 )
@@ -93,57 +93,58 @@ class TestPickDefinition:
 
 
 # --------------------------------------------------------------------------- #
-#  fetch_microsoft_translate — POST к Azure Translator, best-effort
+#  fetch_yandex_translate — POST к Yandex Cloud Translate, best-effort
 # --------------------------------------------------------------------------- #
-class TestFetchMicrosoftTranslate:
+class TestFetchYandexTranslate:
     async def test_translation_ok(self, fake_session_factory, make_response):
         session = fake_session_factory({
-            "microsofttranslator.com": make_response(
+            "translate.api.cloud.yandex.net": make_response(
                 status=200,
-                json_data=[{"translations": [{"text": "доброе утро", "to": "ru"}]}],
+                json_data={"translations": [{"text": "доброе утро"}]},
             ),
         })
-        assert await fetch_microsoft_translate(session, "good morning") == "доброе утро"
+        assert await fetch_yandex_translate(session, "good morning") == "доброе утро"
 
-    async def test_sends_key_region_and_body(self, fake_session_factory, make_response):
+    async def test_sends_auth_header_and_folder(self, fake_session_factory, make_response):
         session = fake_session_factory({
-            "microsofttranslator.com": make_response(
-                status=200, json_data=[{"translations": [{"text": "привет", "to": "ru"}]}],
+            "translate.api.cloud.yandex.net": make_response(
+                status=200, json_data={"translations": [{"text": "привет"}]},
             ),
         })
-        await fetch_microsoft_translate(session, "hi")
+        await fetch_yandex_translate(session, "hi")
         req = session.requests[0]
         assert req["method"] == "POST"
-        assert req["headers"]["Ocp-Apim-Subscription-Key"]
-        assert req["headers"]["Ocp-Apim-Subscription-Region"]
-        assert req["json"] == [{"Text": "hi"}]
+        assert req["headers"]["Authorization"].startswith("Api-Key ")
+        assert req["json"]["texts"] == ["hi"]
+        assert req["json"]["targetLanguageCode"] == "ru"
+        assert "folderId" in req["json"]
 
     async def test_untranslatable_returns_none(self, fake_session_factory, make_response):
-        # Переводчик вернул текст без изменений — значит перевести не смог.
+        # Cloud вернул текст без изменений — значит перевести не смог.
         session = fake_session_factory({
-            "microsofttranslator.com": make_response(
-                status=200, json_data=[{"translations": [{"text": "asdfqwerty"}]}],
+            "translate.api.cloud.yandex.net": make_response(
+                status=200, json_data={"translations": [{"text": "asdfqwerty"}]},
             ),
         })
-        assert await fetch_microsoft_translate(session, "asdfqwerty") is None
+        assert await fetch_yandex_translate(session, "asdfqwerty") is None
 
     async def test_server_error_returns_none(self, fake_session_factory, make_response):
         session = fake_session_factory({
-            "microsofttranslator.com": make_response(status=500, json_data=None),
+            "translate.api.cloud.yandex.net": make_response(status=500, json_data=None),
         })
-        assert await fetch_microsoft_translate(session, "hi") is None
+        assert await fetch_yandex_translate(session, "hi") is None
 
     async def test_timeout_returns_none(self, fake_session_factory, make_response):
         session = fake_session_factory({
-            "microsofttranslator.com": make_response(enter_exc=asyncio.TimeoutError()),
+            "translate.api.cloud.yandex.net": make_response(enter_exc=asyncio.TimeoutError()),
         })
-        assert await fetch_microsoft_translate(session, "hi") is None
+        assert await fetch_yandex_translate(session, "hi") is None
 
     async def test_malformed_response_returns_none(self, fake_session_factory, make_response):
         session = fake_session_factory({
-            "microsofttranslator.com": make_response(status=200, json_data={"unexpected": 1}),
+            "translate.api.cloud.yandex.net": make_response(status=200, json_data={"unexpected": 1}),
         })
-        assert await fetch_microsoft_translate(session, "hi") is None
+        assert await fetch_yandex_translate(session, "hi") is None
 
 
 # --------------------------------------------------------------------------- #
