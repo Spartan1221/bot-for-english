@@ -22,6 +22,30 @@ YANDEX_FOLDER_ID = os.getenv("YANDEX_FOLDER_ID")
 # речи для отдельных слов.
 YANDEX_DICT_API_KEY = os.getenv("YANDEX_DICT_API_KEY")
 
+
+def parse_user_ids(raw: str | None) -> frozenset[int]:
+    """
+    Разбирает список user_id из строки (через запятую/пробел): '123, 456' -> {123, 456}.
+    Некорректные значения молча пропускаются. Пустая строка/None → пустое множество.
+    """
+    ids: list[int] = []
+    for part in (raw or "").replace(" ", "").replace(";", ",").split(","):
+        if part:
+            try:
+                ids.append(int(part))
+            except ValueError:
+                pass
+    return frozenset(ids)
+
+
+# Белый список Telegram user_id, которым разрешён доступ к боту.
+# Пусто/не задано → доступ открыт всем; иначе пускаем только перечисленных.
+# Узнать свой user_id можно у @userinfobot.
+ALLOWED_USER_IDS = parse_user_ids(os.getenv("ALLOWED_USER_IDS"))
+
+# Текст для пользователей вне белого списка.
+ACCESS_DENIED_TEXT = "Извините, доступ к этому боту ограничен. 😕"
+
 # Общий таймаут на любой внешний API — чтобы бот не «зависал» на медленном ответе.
 API_TIMEOUT = aiohttp.ClientTimeout(total=10)
 
