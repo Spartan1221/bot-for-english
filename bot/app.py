@@ -18,6 +18,7 @@ from .config import (
     setup_logging,
 )
 from .handlers import register_handlers
+from .middleware import AccessMiddleware
 
 log = logging.getLogger(__name__)
 
@@ -48,6 +49,9 @@ async def main() -> None:
     bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties())
     dp = Dispatcher()
     register_handlers(dp)
+    # Ограничение доступа по user_id (ALLOWED_USER_IDS); outer-middleware срабатывает
+    # раньше хэндлеров — покрывает и /start, и запросы слов/фраз.
+    dp.message.outer_middleware(AccessMiddleware())
 
     # Один общий HTTP-сеанс на всё время работы бота — переиспользует соединения.
     # Через dp[...] сессия становится доступна хэндлерам как параметр http_session.

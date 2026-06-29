@@ -55,8 +55,9 @@ pytest tests/test_api.py::TestParseDictionary::test_noun_only   # one test
 Note: `requirements-dev.txt` only lists pytest packages, not `requirements.txt`. To run tests you must install both files (or `pip install -r requirements.txt -r requirements-dev.txt`).
 
 Secrets come from `.env` (gitignored) via `python-dotenv`: `BOT_TOKEN`, `YANDEX_CLOUD_API_KEY`,
-`YANDEX_FOLDER_ID`, `YANDEX_DICT_API_KEY`. `bot/app.py` exits with code 1 if **any** of these
-is missing (verified at startup). How to obtain the keys is in `DEPLOYMENT.md` (§2.4.1).
+`YANDEX_FOLDER_ID`, `YANDEX_DICT_API_KEY` (all required — `bot/app.py` exits with code 1 if any
+is missing), and the optional `ALLOWED_USER_IDS` — a comma-separated Telegram user_id whitelist;
+empty/unset means the bot is open to everyone. How to obtain the keys is in `DEPLOYMENT.md` (§2.4.1).
 
 ## Architecture (package `bot/`)
 
@@ -67,7 +68,8 @@ Logic is split by concern across modules; understanding the flow requires readin
 - **`bot/formatting.py`** — `validate_input()`, `classify_input()` (article → part of speech / phrase), `build_sections(...)` → `list[(kind, text)]`, `sections_to_text()` (joins sections with `-----`).
 - **`bot/keyboards.py`** — `SECTION_LABELS` + `build_copy_keyboard(sections)`.
 - **`bot/handlers.py`** — `cmd_start()`, `handle_word()`, `register_handlers(dp)`.
-- **`bot/app.py`** — `main()`: builds `Bot`/`Dispatcher`, registers handlers, owns the HTTP session, verifies secrets, runs polling.
+- **`bot/middleware.py`** — `AccessMiddleware`: gates every message by `user_id` (`ALLOWED_USER_IDS`).
+- **`bot/app.py`** — `main()`: builds `Bot`/`Dispatcher`, registers handlers, attaches `AccessMiddleware`, owns the HTTP session, verifies secrets, runs polling.
 
 Request flow in `handle_word()`: `validate_input` → `classify_input` (returns `head`, `allowed_pos`, `is_phrase`) → branch:
 - **word:** `gather(fetch_free_definition → (def, example), fetch_yandex_dictionary(head) → article)`; variants = `parse_dictionary(article, allowed_pos)` (`None` for a bare word → all POS); translation = comma-joined variants; if empty, fall back to `fetch_yandex_translate`.
@@ -85,6 +87,7 @@ Request flow in `handle_word()`: `validate_input` → `classify_input` (returns 
 - **`parse_dictionary` balances the cap across the parts of speech it processes** (`MAX_TRANSLATIONS` // count each): a specific list (article case) uses those POS; `None` (bare word) uses all POS present in the article. So `set` shows both noun and verb, and a bare adjective like `happy` gets all its variants. Dedup is global; order follows the article.
 - **Translations and the example come from different sources.** Yandex Dictionary returns **no** examples — the example and definition both come from Free Dictionary (`pick_definition` prefers a definition that also has an `example`).
 - **Handler registration order matters** — `cmd_start` (filtered on `CommandStart()`) is registered before the catch-all `handle_word`.
+- **Access is gated by `ALLOWED_USER_IDS`** via `AccessMiddleware` (outer middleware on `dp.message`), so it runs before any handler and covers `/start` too. Empty/unset whitelist = open to everyone; otherwise unauthorized users get «доступ ограничен» and their message is dropped (handler not called).
 - **Input validation is strict:** Latin letters and spaces only (regex in `INPUT_RE`). Digits, punctuation, Cyrillic, and apostrophes (`don't`) are rejected — intentional per the spec, confirmed by tests.
 
 ### Language convention

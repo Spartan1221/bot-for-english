@@ -61,6 +61,10 @@ pip install -r requirements.txt
 ```env
 BOT_TOKEN=123456789:AAH...ваш-реальный-токен...
 
+# Ограничение доступа по user_id (через запятую; пусто = доступ всем).
+# Узнать свой id можно у @userinfobot.
+ALLOWED_USER_IDS=123456789,987654321
+
 # Yandex Cloud Translate — перевод слов и фраз
 YANDEX_CLOUD_API_KEY=ваш-ключ-Yandex-Cloud-Translate
 YANDEX_FOLDER_ID=id-каталога-Yandex-Cloud
@@ -68,7 +72,9 @@ YANDEX_FOLDER_ID=id-каталога-Yandex-Cloud
 # Yandex Dictionary — переводы по частям речи для слов
 YANDEX_DICT_API_KEY=ваш-ключ-Yandex-Dictionary
 ```
-Без любого из этих значений бот не запустится (проверяется при старте).
+Без токена и ключей Yandex бот не запустится (проверяется при старте). `ALLOWED_USER_IDS`
+необязателен: пусто — бот отвечает всем, иначе — только перечисленным пользователям
+(узнать свой `user_id` можно у [@userinfobot](https://t.me/userinfobot)).
 
 #### 2.4.1. Получение ключей
 
